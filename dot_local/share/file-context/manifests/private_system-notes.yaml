@@ -1,0 +1,86 @@
+# System Notes & Documentation Manifest
+# Generated: 2025-12-28
+# Purpose: Track important system notes, guides, and documentation
+
+system_notes:
+  critical:
+    - name: "Global Agent Instructions"
+      path: "~/Documents/Notes/System/AGENTS.md"
+      type: "agent-instructions"
+      priority: "critical"
+      description: "Global agent policy - all projects must follow"
+      policies:
+        - "All secrets in 1Password"
+        - "No plaintext credentials"
+        - "Use op read or 1Password loaders"
+      references:
+        - "~/System/Guides/AGENTS.md"
+      tags: ["policy", "security", "agents", "critical"]
+
+  workspace_docs:
+    - name: "Workspace README"
+      path: "~/Workspace/README.md"
+      type: "documentation"
+      description: "Workspace organization documentation"
+      tags: ["workspace", "documentation"]
+
+    - name: "Metasystem Structure Proposal"
+      path: "~/Workspace/METASYSTEM-STRUCTURE-PROPOSAL.md"
+      type: "architecture"
+      description: "System architecture proposal"
+      tags: ["architecture", "proposal", "planning"]
+
+    - name: "Universal Orchestrator Architecture"
+      path: "~/Workspace/UNIVERSAL-ORCHESTRATOR-ARCHITECTURE.md"
+      type: "architecture"
+      description: "Orchestrator architecture documentation"
+      tags: ["architecture", "orchestrator", "design"]
+
+  dotfiles_docs:
+    - name: "Dotfiles README"
+      location: "repository-only"
+      path: "~/.local/share/chezmoi/README.md"
+      type: "documentation"
+      description: "Main dotfiles documentation"
+      tags: ["dotfiles", "documentation"]
+
+    - name: "1Password Setup Guide"
+      location: "repository-only"
+      path: "~/.local/share/chezmoi/1PASSWORD_SETUP.md"
+      type: "guide"
+      description: "1Password integration testing guide"
+      tags: ["dotfiles", "1password", "secrets", "guide"]
+
+    - name: "Organization Strategy"
+      location: "repository-only"
+      path: "~/.local/share/chezmoi/ORGANIZATION_STRATEGY.md"
+      type: "strategy"
+      description: "Complete file organization architecture (1000+ lines)"
+      tags: ["organization", "strategy", "architecture"]
+
+    - name: "Organization Quickstart"
+      location: "repository-only"
+      path: "~/.local/share/chezmoi/ORGANIZATION_QUICKSTART.md"
+      type: "guide"
+      description: "5-minute organization quickstart guide"
+      tags: ["organization", "quickstart", "guide"]
+
+system_guides:
+  - name: "System Guides"
+    path: "~/System/Guides/"
+    size: "~1.9GB"
+    type: "reference"
+    description: "General development conventions and workspace practices"
+    tags: ["guides", "reference", "large"]
+    notes: "Consider archiving to external drive"
+
+notes:
+  documentation_health: "good"
+  critical_files_protected: true
+  secrets_policy_documented: true
+
+  recommendations:
+    - "Backup AGENTS.md to dotfiles repo (as template or doc)"
+    - "Archive ~/System/Guides/ to external drive"
+    - "Create ~/Documents/Notes/Architecture/ for architecture docs"
+    - "Move architecture docs from ~/Workspace/ to ~/Documents/Notes/Architecture/"

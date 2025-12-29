@@ -1,0 +1,154 @@
+# Project Manifest
+# Generated: 2025-12-28
+# Purpose: Document all projects, their locations, purpose, and status
+
+projects:
+  active:
+    - name: "dotfiles"
+      path: "~/.local/share/chezmoi"
+      github: "https://github.com/4444JPP/dotfiles"
+      type: "system-configuration"
+      priority: "critical"
+      storage: "local"
+      backup:
+        - "GitHub (private)"
+        - "Automatic push on change"
+      description: "Personal dotfiles with chezmoi, 1Password integration, multi-OS support"
+      tags: ["system", "dotfiles", "critical", "synced"]
+      size: "~5MB"
+
+    - name: "4444JPP"
+      path: "~/Workspace/4444JPP"
+      type: "development"
+      priority: "high"
+      storage: "local"
+      size: "4.1GB"
+      description: "Main development project"
+      tags: ["development", "large", "active"]
+      notes: "Largest project - consider archiving old branches or moving to external"
+
+    - name: "labores-profani-crux"
+      path: "~/Workspace/labores-profani-crux"
+      type: "development"
+      storage: "local"
+      size: "1.3GB"
+      tags: ["development", "large", "active"]
+
+    - name: "omni-dromenon-machina"
+      path: "~/Workspace/omni-dromenon-machina"
+      type: "development"
+      storage: "local"
+      size: "1.2GB"
+      tags: ["development", "large", "active"]
+
+    - name: "life-my--midst--in"
+      path: "~/Workspace/life-my--midst--in"
+      type: "development"
+      storage: "local"
+      size: "683MB"
+      tags: ["development", "medium", "active"]
+
+    - name: "gamified-coach-interface"
+      path: "~/Workspace/gamified-coach-interface.worktrees"
+      type: "development"
+      storage: "local"
+      size: "239MB"
+      git_worktrees: true
+      tags: ["development", "worktrees", "active"]
+
+    - name: "mail_automation"
+      path: "~/Workspace/mail_automation"
+      type: "automation"
+      storage: "local"
+      size: "129MB"
+      tags: ["automation", "utility", "active"]
+
+    - name: "mcp-servers"
+      path: "~/Workspace/mcp-servers"
+      type: "development"
+      storage: "local"
+      size: "65MB"
+      tags: ["mcp", "servers", "active"]
+
+    - name: "cloudbase-mcp"
+      path: "~/cloudbase-mcp"
+      type: "development"
+      storage: "local"
+      size: "15MB"
+      tags: ["mcp", "cloudbase", "active"]
+      notes: "In home root - should move to ~/Workspace/ or ~/Projects/Active/"
+
+    - name: "ivviiviivvi"
+      path: "~/Workspace/ivviiviivvi"
+      type: "development"
+      storage: "local"
+      size: "30MB"
+      tags: ["development", "active"]
+
+  reference:
+    - name: "hokage-chess--believe-it!"
+      path: "~/Documents/Projects/hokage-chess--believe-it!"
+      type: "reference"
+      storage: "local"
+      tags: ["reference", "archived"]
+
+    - name: "omni-dromenon"
+      path: "~/Documents/Projects/omni-dromenon"
+      type: "reference"
+      storage: "local"
+      tags: ["reference", "archived"]
+
+    - name: "synth-wave-modules"
+      path: "~/Documents/Projects/synth-wave-modules"
+      type: "reference"
+      storage: "local"
+      tags: ["reference", "music", "archived"]
+
+    - name: "unknown-tombs-lingusitics-atomized"
+      path: "~/Documents/Projects/unknown-tombs-lingusitics-atomized"
+      type: "reference"
+      storage: "local"
+      tags: ["reference", "linguistics", "archived"]
+
+  external:
+    - name: "ivi374-workspace"
+      path: "~/External/ivi374forivi3ivi3/workspace"
+      symlink: "~/Projects/ivi374"
+      type: "development"
+      priority: "high"
+      storage: "external"
+      drive: "/Volumes/4444-iivii"
+      size: "large"
+      description: "Main workspace on external drive"
+      tags: ["external", "workspace", "large"]
+      notes: "Requires external drive mounted"
+
+    - name: "ivi374-toolchains"
+      path: "~/External/ivi374forivi3ivi3/toolchains"
+      symlink: "~/.local/share/toolchains"
+      type: "toolchain"
+      storage: "external"
+      drive: "/Volumes/4444-iivii"
+      tags: ["external", "toolchain", "build"]
+      in_path: true
+      notes: "Added to PATH when drive mounted"
+
+notes:
+  total_projects: 18
+  active_count: 10
+  reference_count: 4
+  external_count: 2
+  total_size_local: "~7.8GB"
+  largest_project: "4444JPP (4.1GB)"
+
+  recommendations:
+    - "Move cloudbase-mcp from ~/ to ~/Workspace/"
+    - "Consider archiving large old branches in 4444JPP"
+    - "Migrate completed projects to ~/External/Archive/"
+    - "Create symlinks in ~/Projects/Active/ for frequently used workspace projects"
+
+  migration_plan:
+    - "Phase 1: Move cloudbase-mcp to ~/Workspace/"
+    - "Phase 2: Create symlinks in ~/Projects/Active/ for top 5 projects"
+    - "Phase 3: Archive old projects to external drive"
+    - "Phase 4: Eventually migrate ~/Workspace/ to ~/Projects/Active/"
