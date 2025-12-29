@@ -22,3 +22,12 @@ work_scripts/
 *.swp
 *.swo
 *~
+
+# Repository documentation (don't apply to home directory)
+README.md
+1PASSWORD_SETUP.md
+ORGANIZATION_STRATEGY.md
+ORGANIZATION_QUICKSTART.md
+EXTERNAL_DRIVE.md
+PLUGINS.md
+DOTFILES_CLEANUP.md
