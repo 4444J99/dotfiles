@@ -65,3 +65,14 @@ if [ -f '{{ .chezmoi.homeDir }}/google-cloud-sdk/completion.zsh.inc' ]; then . '
 
 # pipx local bin
 export PATH="$HOME/.local/bin:$PATH"
+
+# Chezmoi aliases for dotfile management
+alias cm='chezmoi'
+alias cma='chezmoi apply'
+alias cmd='chezmoi diff'
+alias cme='chezmoi edit'
+alias cmu='chezmoi update'
+alias cms='chezmoi status'
+alias cmcd='cd ~/.local/share/chezmoi'
+alias cmpush='cd ~/.local/share/chezmoi && git push'
+alias cmlog='cd ~/.local/share/chezmoi && git log --oneline -10'
