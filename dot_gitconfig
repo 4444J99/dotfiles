@@ -1,0 +1,14 @@
+[safe]
+	directory = /Volumes/4444-iivii
+	directory = /Volumes/4444-iivii/ivi374forivi3ivi3/workspace
+	directory = /Volumes/4444-iivii/ivi374forivi3ivi3
+[filter "lfs"]
+	smudge = git-lfs smudge -- %f
+	process = git-lfs filter-process
+	required = true
+	clean = git-lfs clean -- %f
+[user]
+	email = etceter4@etceter4.com
+	name = 4444jPPP
+[core]
+	hooksPath = /Users/4jp/.config/git/hooks
