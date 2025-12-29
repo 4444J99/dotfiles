@@ -1,18 +1,41 @@
 # SSH Config managed by chezmoi
-# Using 1Password SSH agent
+# Using 1Password SSH agent for secure key management
 
 Host *
+{{- if eq .chezmoi.os "darwin" }}
+	# macOS: 1Password SSH agent
 	IdentityAgent "~/Library/Group Containers/2BUA8C4S2C.com.1password/t/agent.sock"
 	AddKeysToAgent yes
 	UseKeychain yes
+{{- else if eq .chezmoi.os "linux" }}
+	# Linux: 1Password SSH agent
+	IdentityAgent ~/.1password/agent.sock
+	AddKeysToAgent yes
+{{- end }}
 
+	# Security settings
+	ServerAliveInterval 60
+	ServerAliveCountMax 3
+
+	# Performance
+	ControlMaster auto
+	ControlPath ~/.ssh/sockets/%r@%h:%p
+	ControlPersist 600
+
+# GitHub
 Host github.com
 	HostName github.com
 	User git
 	IdentitiesOnly yes
 
+# AWS EC2 instances
 Host *.compute.amazonaws.com
 	User ec2-user
 	IdentitiesOnly yes
 
 # Add more hosts as needed
+# Example:
+# Host myserver
+# 	HostName myserver.example.com
+# 	User myusername
+# 	Port 22
