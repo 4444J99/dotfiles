@@ -1,34 +1,27 @@
+# ─────────────────────────────────────────────────────────────────────────────
+# ZSH Configuration - Managed by Chezmoi
+# ─────────────────────────────────────────────────────────────────────────────
 
 # Ensure unique PATH entries
 typeset -U path PATH
 
 # Root Directory Guard
-# Prevents running shells from root to avoid cluttering the system root
 if [[ "$PWD" == "/" ]]; then
   echo "Warning: Shell started in root. Switching to home directory."
   cd ~
 fi
 
-{{- if eq .chezmoi.os "darwin" }}
-# macOS: iTerm2 shell integration
-test -e "${HOME}/.iterm2_shell_integration.zsh" && source "${HOME}/.iterm2_shell_integration.zsh"
+# ─────────────────────────────────────────────────────────────────────────────
+# PATH Configuration
+# ─────────────────────────────────────────────────────────────────────────────
 
-# Docker CLI completions (macOS)
-fpath=({{ .chezmoi.homeDir }}/.docker/completions $fpath)
-{{- end }}
-
-# Shell completions
-autoload -Uz compinit
-compinit
-
-# Homebrew (OS-specific paths)
 {{- if eq .chezmoi.os "darwin" }}
 {{- if eq .chezmoi.arch "arm64" }}
-# macOS ARM64 (Apple Silicon)
+# macOS ARM64 (Apple Silicon) - Homebrew
 export PATH="/opt/homebrew/bin:/opt/homebrew/sbin:$PATH"
 export PATH="/opt/homebrew/opt/file-formula/bin:$PATH"
 {{- else }}
-# macOS Intel
+# macOS Intel - Homebrew
 export PATH="/usr/local/bin:/usr/local/sbin:$PATH"
 {{- end }}
 {{- else if eq .chezmoi.os "linux" }}
@@ -48,25 +41,175 @@ export PKG_CONFIG_PATH="/opt/homebrew/opt/ruby/lib/pkgconfig"
 export GOPATH=$HOME/go
 export PATH=$PATH:$GOPATH/bin
 
-{{- if eq .chezmoi.os "darwin" }}
-# Toolchains (External Volume - macOS only)
-export PATH=$PATH:/Volumes/4444-iivii/ivi374forivi3ivi3/toolchains/bin
-{{- end }}
-
-# Gemini CLI Configuration
-export GEMINI_CLI=1
-if [ -f "$HOME/.config/op/secrets.zsh" ]; then
-  source "$HOME/.config/op/secrets.zsh"
-fi
-
-# Google Cloud SDK
-if [ -f '{{ .chezmoi.homeDir }}/google-cloud-sdk/path.zsh.inc' ]; then . '{{ .chezmoi.homeDir }}/google-cloud-sdk/path.zsh.inc'; fi
-if [ -f '{{ .chezmoi.homeDir }}/google-cloud-sdk/completion.zsh.inc' ]; then . '{{ .chezmoi.homeDir }}/google-cloud-sdk/completion.zsh.inc'; fi
-
 # pipx local bin
 export PATH="$HOME/.local/bin:$PATH"
 
-# Chezmoi aliases for dotfile management
+{{- if eq .chezmoi.os "darwin" }}
+# Toolchains (External Volume - macOS only)
+# Graceful fallback if external drive not mounted
+if [[ -d "/Volumes/4444-iivii/ivi374forivi3ivi3/toolchains/bin" ]]; then
+  export PATH=$PATH:/Volumes/4444-iivii/ivi374forivi3ivi3/toolchains/bin
+fi
+{{- end }}
+
+# ─────────────────────────────────────────────────────────────────────────────
+# Environment Variables
+# ─────────────────────────────────────────────────────────────────────────────
+
+export EDITOR=nvim
+export VISUAL=nvim
+
+# Gemini CLI Configuration
+export GEMINI_CLI=1
+
+# XDG Base Directory (already configured in ~/.config/environment)
+# But ensure EDITOR is set for tools that check it
+
+# ─────────────────────────────────────────────────────────────────────────────
+# Shell Completions
+# ─────────────────────────────────────────────────────────────────────────────
+
+{{- if eq .chezmoi.os "darwin" }}
+# Docker CLI completions (macOS)
+fpath=({{ .chezmoi.homeDir }}/.docker/completions $fpath)
+
+# macOS: iTerm2 shell integration
+test -e "${HOME}/.iterm2_shell_integration.zsh" && source "${HOME}/.iterm2_shell_integration.zsh"
+{{- end }}
+
+# Initialize completions
+autoload -Uz compinit
+compinit
+
+# ─────────────────────────────────────────────────────────────────────────────
+# 1Password Secrets (load early for API keys)
+# ─────────────────────────────────────────────────────────────────────────────
+
+if [[ -f "$HOME/.config/op/secrets.zsh" ]]; then
+  source "$HOME/.config/op/secrets.zsh"
+fi
+
+# ─────────────────────────────────────────────────────────────────────────────
+# Tool Initializations
+# ─────────────────────────────────────────────────────────────────────────────
+
+# Starship prompt
+if command -v starship &>/dev/null; then
+  eval "$(starship init zsh)"
+fi
+
+# Zoxide (smart cd)
+if command -v zoxide &>/dev/null; then
+  eval "$(zoxide init zsh)"
+fi
+
+# fzf (fuzzy finder)
+if command -v fzf &>/dev/null; then
+  # Set up fzf key bindings and fuzzy completion
+  source <(fzf --zsh)
+
+  # Use fd for fzf if available (respects .gitignore)
+  if command -v fd &>/dev/null; then
+    export FZF_DEFAULT_COMMAND='fd --type f --hidden --follow --exclude .git'
+    export FZF_CTRL_T_COMMAND="$FZF_DEFAULT_COMMAND"
+    export FZF_ALT_C_COMMAND='fd --type d --hidden --follow --exclude .git'
+  fi
+
+  # fzf appearance
+  export FZF_DEFAULT_OPTS='
+    --height 40%
+    --layout=reverse
+    --border
+    --info=inline
+    --preview-window=right:50%:wrap
+  '
+
+  # Preview files with bat if available
+  if command -v bat &>/dev/null; then
+    export FZF_CTRL_T_OPTS="--preview 'bat --style=numbers --color=always --line-range :500 {}'"
+  fi
+fi
+
+# Atuin (shell history)
+if command -v atuin &>/dev/null; then
+  eval "$(atuin init zsh)"
+fi
+
+# direnv (directory-specific environments)
+if command -v direnv &>/dev/null; then
+  eval "$(direnv hook zsh)"
+fi
+
+# mise (tool version manager)
+if command -v mise &>/dev/null; then
+  eval "$(mise activate zsh)"
+fi
+
+# Google Cloud SDK
+if [[ -f '{{ .chezmoi.homeDir }}/google-cloud-sdk/path.zsh.inc' ]]; then
+  source '{{ .chezmoi.homeDir }}/google-cloud-sdk/path.zsh.inc'
+fi
+if [[ -f '{{ .chezmoi.homeDir }}/google-cloud-sdk/completion.zsh.inc' ]]; then
+  source '{{ .chezmoi.homeDir }}/google-cloud-sdk/completion.zsh.inc'
+fi
+
+# ─────────────────────────────────────────────────────────────────────────────
+# Modern CLI Aliases
+# ─────────────────────────────────────────────────────────────────────────────
+
+# eza (modern ls replacement)
+if command -v eza &>/dev/null; then
+  alias ls='eza --icons'
+  alias ll='eza -la --icons --git'
+  alias la='eza -a --icons'
+  alias lt='eza --tree --level=2 --icons'
+  alias llt='eza -la --tree --level=2 --icons --git'
+else
+  alias ll='ls -la'
+  alias la='ls -a'
+fi
+
+# bat (modern cat replacement)
+if command -v bat &>/dev/null; then
+  alias cat='bat --paging=never'
+  alias catp='bat'  # with paging
+fi
+
+# ripgrep (modern grep)
+if command -v rg &>/dev/null; then
+  alias grep='rg'
+fi
+
+# ─────────────────────────────────────────────────────────────────────────────
+# Git Shortcuts
+# ─────────────────────────────────────────────────────────────────────────────
+
+alias g='git'
+alias gs='git status -sb'
+alias gd='git diff'
+alias gds='git diff --staged'
+alias ga='git add'
+alias gaa='git add -A'
+alias gc='git commit'
+alias gcm='git commit -m'
+alias gca='git commit --amend'
+alias gco='git checkout'
+alias gcb='git checkout -b'
+alias gpl='git pull --rebase'
+alias gps='git push'
+alias gpsf='git push --force-with-lease'
+alias gl='git log --oneline --graph --decorate -20'
+alias gla='git log --oneline --graph --decorate --all'
+alias gst='git stash'
+alias gstp='git stash pop'
+alias gb='git branch'
+alias gba='git branch -a'
+alias gbd='git branch -d'
+
+# ─────────────────────────────────────────────────────────────────────────────
+# Chezmoi Aliases
+# ─────────────────────────────────────────────────────────────────────────────
+
 alias cm='chezmoi'
 alias cma='chezmoi apply'
 alias cmd='chezmoi diff'
@@ -76,3 +219,57 @@ alias cms='chezmoi status'
 alias cmcd='cd ~/.local/share/chezmoi'
 alias cmpush='cd ~/.local/share/chezmoi && git push'
 alias cmlog='cd ~/.local/share/chezmoi && git log --oneline -10'
+
+# ─────────────────────────────────────────────────────────────────────────────
+# Python Aliases
+# ─────────────────────────────────────────────────────────────────────────────
+
+# Homebrew installs pip3, pip3.14, etc. but not a plain 'pip' command
+alias pip='pip3'
+alias pip3='pip3.14'
+
+# ─────────────────────────────────────────────────────────────────────────────
+# Homebrew & System Maintenance
+# ─────────────────────────────────────────────────────────────────────────────
+
+alias brewup='brew update && brew upgrade && brew cleanup && brew doctor'
+
+# ─────────────────────────────────────────────────────────────────────────────
+# Utility Aliases
+# ─────────────────────────────────────────────────────────────────────────────
+
+# Quick navigation
+alias ..='cd ..'
+alias ...='cd ../..'
+alias ....='cd ../../..'
+
+# Common directories
+alias dl='cd ~/Downloads'
+alias dt='cd ~/Desktop'
+alias proj='cd ~/Projects'
+
+# Reload shell config
+alias reload='source ~/.zshrc'
+
+# IP addresses
+alias myip='curl -s https://api.ipify.org && echo'
+alias localip='ipconfig getifaddr en0'
+
+# ─────────────────────────────────────────────────────────────────────────────
+# Tmux Helpers
+# ─────────────────────────────────────────────────────────────────────────────
+
+alias tm='tmux'
+alias tma='tmux attach -t'
+alias tmn='tmux new -s'
+alias tml='tmux list-sessions'
+alias tmk='tmux kill-session -t'
+
+# ─────────────────────────────────────────────────────────────────────────────
+# Just (command runner) completion
+# ─────────────────────────────────────────────────────────────────────────────
+
+if command -v just &>/dev/null; then
+  # just completions are installed by Homebrew to site-functions
+  alias j='just'
+fi

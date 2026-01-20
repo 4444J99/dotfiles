@@ -1,21 +1,137 @@
+# ─────────────────────────────────────────────────────────────────────────────
+# Git Configuration - Managed by Chezmoi
+# ─────────────────────────────────────────────────────────────────────────────
+
+[user]
+	email = {{ .email }}
+	name = {{ .name }}
+
+[core]
+	hooksPath = {{ .chezmoi.homeDir }}/.config/git/hooks
+	excludesfile = {{ .chezmoi.homeDir }}/.config/git/ignore
+	editor = nvim
+	pager = delta
+
+[init]
+	defaultBranch = main
+
+[pull]
+	rebase = true
+
+[push]
+	autoSetupRemote = true
+	default = current
+
+[fetch]
+	prune = true
+
+[rebase]
+	autoStash = true
+
+[merge]
+	conflictstyle = diff3
+
+[diff]
+	colorMoved = default
+
+# Delta pager (if installed)
+[delta]
+	navigate = true
+	side-by-side = false
+	line-numbers = true
+
+[interactive]
+	diffFilter = delta --color-only
+
+# ─────────────────────────────────────────────────────────────────────────────
+# Aliases
+# ─────────────────────────────────────────────────────────────────────────────
+
+[alias]
+	# Status and info
+	s = status -sb
+	ss = status
+
+	# Branching
+	co = checkout
+	cb = checkout -b
+	sw = switch
+	swc = switch -c
+
+	# Commits
+	cm = commit -m
+	ca = commit --amend
+	can = commit --amend --no-edit
+
+	# Add
+	aa = add -A
+	ap = add -p
+
+	# Pull/Push
+	pl = pull --rebase
+	ps = push
+	psf = push --force-with-lease
+	psu = push -u origin HEAD
+
+	# Stash
+	st = stash
+	stp = stash pop
+	stl = stash list
+
+	# Log views
+	lg = log --oneline --graph --decorate -20
+	lga = log --oneline --graph --decorate --all
+	ll = log --pretty=format:'%C(yellow)%h%Creset %s %C(cyan)(%cr)%Creset %C(blue)<%an>%Creset' -20
+	last = log -1 HEAD --stat
+
+	# Diff
+	df = diff
+	dfs = diff --staged
+	dfw = diff --word-diff
+
+	# Branch management
+	br = branch
+	bra = branch -a
+	brd = branch -d
+	brD = branch -D
+
+	# Reset
+	unstage = reset HEAD --
+	undo = reset --soft HEAD~1
+
+	# Utility
+	contributors = shortlog -sn
+	aliases = config --get-regexp alias
+	whoami = config user.email
+	root = rev-parse --show-toplevel
+
+	# Show current branch
+	current = rev-parse --abbrev-ref HEAD
+
+# ─────────────────────────────────────────────────────────────────────────────
+# Safe Directories (external volumes)
+# ─────────────────────────────────────────────────────────────────────────────
+
 [safe]
 	directory = /Volumes/4444-iivii
 	directory = /Volumes/4444-iivii/ivi374forivi3ivi3/workspace
 	directory = /Volumes/4444-iivii/ivi374forivi3ivi3
+
+# ─────────────────────────────────────────────────────────────────────────────
+# Git LFS
+# ─────────────────────────────────────────────────────────────────────────────
+
 [filter "lfs"]
 	smudge = git-lfs smudge -- %f
 	process = git-lfs filter-process
 	required = true
 	clean = git-lfs clean -- %f
-[user]
-	email = {{ .email }}
-	name = {{ .name }}
-[core]
-	hooksPath = {{ .chezmoi.homeDir }}/.config/git/hooks
-	excludesfile = {{ .chezmoi.homeDir }}/.config/git/ignore
+
+# ─────────────────────────────────────────────────────────────────────────────
+# GitHub Authentication
+# ─────────────────────────────────────────────────────────────────────────────
 
 # GitHub token from 1Password
-# Using existing 1Password item: master-org-token-110525
 [github]
 	user = {{ .name }}
 	token = {{ onepasswordRead "op://Personal/master-org-token-110525/token" }} # allow-secret
