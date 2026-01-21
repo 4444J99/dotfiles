@@ -1,0 +1,22 @@
+{
+  "templates": {
+    "CODE_OF_CONDUCT.md": {
+      "source": "local",
+      "path": "CODE_OF_CONDUCT.md",
+      "url": "https://www.contributor-covenant.org/version/2/1/code_of_conduct/code_of_conduct.md"
+    },
+    "CONTRIBUTING.md": {
+      "source": "local",
+      "path": "CONTRIBUTING.md"
+    },
+    "SECURITY.md": {
+      "source": "local",
+      "path": "SECURITY.md"
+    }
+  },
+  "placeholders": {
+    "PROJECT_NAME": "auto",
+    "CONTACT_EMAIL": "auto",
+    "YEAR": "auto"
+  }
+}

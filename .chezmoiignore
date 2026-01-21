@@ -33,6 +33,7 @@ work_scripts/
 
 # Repository documentation (don't apply to home directory)
 README.md
+.claude/README.md
 1PASSWORD_SETUP.md
 ORGANIZATION_STRATEGY.md
 ORGANIZATION_QUICKSTART.md
