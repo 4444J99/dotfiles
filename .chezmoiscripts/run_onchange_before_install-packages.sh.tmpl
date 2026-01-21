@@ -35,12 +35,13 @@ brew install \
   python3 \
   go
 
-# Install optional but recommended
+# Install optional but recommended (skip if already installed)
 echo "📦 Installing recommended packages..."
-brew install --cask \
-  1password \
-  iterm2 \
-  visual-studio-code
+for cask in 1password iterm2 visual-studio-code; do
+  if ! brew list --cask "$cask" &>/dev/null; then
+    brew install --cask "$cask" || echo "  ⚠️  Failed to install $cask (may need manual install)"
+  fi
+done
 
 {{- else if eq .chezmoi.os "linux" }}
 # Linux: Use apt/yum based on distro
