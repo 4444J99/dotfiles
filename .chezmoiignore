@@ -17,6 +17,14 @@ Library/
 work_scripts/
 {{ end }}
 
+# Ignore AWS credentials unless explicitly enabled
+# Set has_aws_credentials = true in ~/.config/chezmoi/chezmoi.toml to enable
+{{ if not (hasKey . "has_aws_credentials") }}
+.aws/credentials
+{{ else if not .has_aws_credentials }}
+.aws/credentials
+{{ end }}
+
 # Always ignore these
 .DS_Store
 *.swp
