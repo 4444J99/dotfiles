@@ -230,9 +230,9 @@ alias cmr='chezmoi-recover'
 # Python Aliases
 # ─────────────────────────────────────────────────────────────────────────────
 
-# Homebrew installs pip3, pip3.14, etc. but not a plain 'pip' command
-alias pip='pip3'
-alias pip3='pip3.14'
+# Use python3 -m pip for version-agnostic pip access
+alias pip='python3 -m pip'
+alias pip3='python3 -m pip'
 
 # ─────────────────────────────────────────────────────────────────────────────
 # System Maintenance & Cleanup
