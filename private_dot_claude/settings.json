@@ -1,0 +1,6 @@
+{
+  "statusLine": {
+    "type": "command",
+    "command": "/bin/bash /Users/4jp/.claude/statusline-command.sh"
+  }
+}
