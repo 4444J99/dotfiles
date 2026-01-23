@@ -1,0 +1,5 @@
+cheats:
+  paths:
+    - ~/.config/navi/cheats
+finder:
+  command: fzf

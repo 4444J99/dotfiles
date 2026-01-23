@@ -104,6 +104,54 @@ if status is-interactive
     end
 
     # ─────────────────────────────────────────────────────────────────────────
+    # Color Theme Tools
+    # ─────────────────────────────────────────────────────────────────────────
+
+    # pywal - restore colors on shell startup
+    if command -q wal; and test -f $HOME/.cache/wal/sequences
+        cat $HOME/.cache/wal/sequences &
+        if test -f $HOME/.cache/wal/colors.fish
+            source $HOME/.cache/wal/colors.fish
+        end
+    end
+
+    # lolcat aliases
+    if command -q lolcat
+        alias lc lolcat
+        alias lca 'lolcat -a'
+        alias lcf 'lolcat -a -d 2 -s 50'
+    end
+
+    # ─────────────────────────────────────────────────────────────────────────
+    # Command Help Tools
+    # ─────────────────────────────────────────────────────────────────────────
+
+    # navi (interactive cheatsheet) - Ctrl+G
+    if command -q navi
+        navi widget fish | source
+    end
+
+    # tealdeer (tldr client)
+    if command -q tldr
+        alias tl tldr
+        alias tldr-update 'tldr --update'
+    end
+
+    # cheat.sh function
+    function cht -d "cheat.sh lookup with fzf"
+        if test (count $argv) -eq 0
+            curl -s "cheat.sh/:list" | fzf \
+                --preview 'curl -s "cheat.sh/{}"' \
+                --preview-window=right:60%:wrap \
+                --header 'cheat.sh - Enter to view' \
+                --bind 'enter:execute(curl -s "cheat.sh/{}" | less -R)+abort'
+        else
+            set -l query (string join '+' $argv)
+            curl -s "cheat.sh/$query" | less -R
+        end
+    end
+
+    # ─────────────────────────────────────────────────────────────────────────
     # Abbreviations (Fish's smart aliases)
     # ─────────────────────────────────────────────────────────────────────────
 

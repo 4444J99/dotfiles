@@ -36,7 +36,21 @@ brew install \
   go \
   git-delta \
   lazygit \
-  bat
+  bat \
+  lolcat \
+  navi \
+  tealdeer
+
+# pywal (Python package for image-based color themes)
+# Use pipx to avoid PEP 668 externally-managed-environment issues
+if ! command -v pipx &>/dev/null; then
+  brew install pipx
+  pipx ensurepath
+fi
+pipx install pywal 2>/dev/null || pipx upgrade pywal 2>/dev/null || true
+
+# Initialize tealdeer cache
+command -v tldr &>/dev/null && tldr --update || true
 
 # Install optional but recommended (skip if already installed)
 echo "📦 Installing recommended packages..."

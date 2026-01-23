@@ -1,0 +1,51 @@
+#!/bin/bash
+# Theme switching utility - pywal wrapper
+# Usage: theme-switch <image> | --restore | --tokyo-night | --list | --theme <name>
+set -e
+
+case "${1:-}" in
+  -h|--help)
+    echo "Usage: theme-switch <image> | --restore | --tokyo-night | --list | --theme <name>"
+    echo ""
+    echo "Commands:"
+    echo "  <image>         Apply pywal theme from image file"
+    echo "  --restore, -R   Restore last pywal theme"
+    echo "  --tokyo-night   Clear pywal, return to default Tokyo Night theme"
+    echo "  --list          List built-in pywal themes"
+    echo "  --theme <name>  Apply a built-in pywal theme"
+    ;;
+  --restore|-R)
+    wal -R && echo "Theme restored"
+    ;;
+  --tokyo-night)
+    rm -rf ~/.cache/wal/
+    echo "Cleared pywal cache. Restart terminal for Tokyo Night."
+    ;;
+  --list)
+    wal --theme
+    ;;
+  --theme)
+    if [[ -z "${2:-}" ]]; then
+      echo "Error: --theme requires a theme name"
+      echo "Run 'theme-switch --list' to see available themes"
+      exit 1
+    fi
+    wal --theme "$2"
+    [[ -n "$KITTY_PID" ]] && kitty @ set-colors -a ~/.cache/wal/colors-kitty.conf 2>/dev/null || true
+    echo "Theme '$2' applied"
+    ;;
+  "")
+    echo "Usage: theme-switch <image> | --restore | --tokyo-night | --list | --theme <name>"
+    echo "Run 'theme-switch --help' for more info"
+    ;;
+  *)
+    if [[ -f "$1" ]]; then
+      wal -i "$1"
+      [[ -n "$KITTY_PID" ]] && kitty @ set-colors -a ~/.cache/wal/colors-kitty.conf 2>/dev/null || true
+      echo "Theme applied from $1"
+    else
+      echo "Error: File not found: $1"
+      exit 1
+    fi
+    ;;
+esac

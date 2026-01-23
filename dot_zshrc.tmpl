@@ -151,6 +151,52 @@ if command -v mise &>/dev/null; then
   eval "$(mise activate zsh)"
 fi
 
+# ─────────────────────────────────────────────────────────────────────────────
+# Color Theme Tools
+# ─────────────────────────────────────────────────────────────────────────────
+
+# pywal - restore colors on shell startup
+if command -v wal &>/dev/null && [[ -f "$HOME/.cache/wal/sequences" ]]; then
+  (cat ~/.cache/wal/sequences &)
+  [[ -f "$HOME/.cache/wal/colors.sh" ]] && source "$HOME/.cache/wal/colors.sh"
+fi
+
+# lolcat aliases
+if command -v lolcat &>/dev/null; then
+  alias lc='lolcat'
+  alias lca='lolcat -a'
+  alias lcf='lolcat -a -d 2 -s 50'
+fi
+
+# ─────────────────────────────────────────────────────────────────────────────
+# Command Help Tools
+# ─────────────────────────────────────────────────────────────────────────────
+
+# navi (interactive cheatsheet) - Ctrl+G
+if command -v navi &>/dev/null; then
+  eval "$(navi widget zsh)"
+fi
+
+# tealdeer (tldr client)
+if command -v tldr &>/dev/null; then
+  alias tl='tldr'
+  alias tldr-update='tldr --update'
+fi
+
+# cheat.sh with fzf integration
+cht() {
+  local query="${*:-}"
+  if [[ -z "$query" ]]; then
+    curl -s "cheat.sh/:list" | fzf \
+      --preview 'curl -s "cheat.sh/{}"' \
+      --preview-window=right:60%:wrap \
+      --header 'cheat.sh - Enter to view' \
+      --bind 'enter:execute(curl -s "cheat.sh/{}" | less -R)+abort'
+  else
+    curl -s "cheat.sh/${query// /+}" | less -R
+  fi
+}
+
 # Google Cloud SDK
 if [[ -f '{{ .chezmoi.homeDir }}/google-cloud-sdk/path.zsh.inc' ]]; then
   source '{{ .chezmoi.homeDir }}/google-cloud-sdk/path.zsh.inc'

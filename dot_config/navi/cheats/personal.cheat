@@ -1,0 +1,95 @@
+% chezmoi, dotfiles
+
+# Apply chezmoi changes
+chezmoi apply
+
+# Check chezmoi diff before applying
+chezmoi diff
+
+# Check chezmoi health
+chezmoi-health
+
+# Recover from drift
+chezmoi-recover
+
+# Edit chezmoi source file
+chezmoi edit <file>
+
+% git, version control
+
+# Interactive rebase last n commits
+git rebase -i HEAD~<n>
+
+# Cherry-pick a commit
+git cherry-pick <commit>
+
+# Undo last commit (keep changes)
+git reset --soft HEAD~1
+
+# Show commit details
+git show <commit>
+
+# Stash with message
+git stash push -m "<message>"
+
+% docker, containers
+
+# Remove all stopped containers
+docker container prune -f
+
+# Execute shell in container
+docker exec -it <container> /bin/sh
+
+# View container logs (follow)
+docker logs -f <container>
+
+# List all images
+docker images
+
+# Remove unused images
+docker image prune -a
+
+% theme, colors
+
+# Apply theme from image
+theme-switch <image_path>
+
+# Restore last pywal theme
+theme-switch --restore
+
+# Return to Tokyo Night
+theme-switch --tokyo-night
+
+# List available pywal themes
+theme-switch --list
+
+# Apply built-in pywal theme
+theme-switch --theme <theme_name>
+
+% system, maintenance
+
+# Full system maintenance
+maintain
+
+# Quick cache cleanup
+maintain-quick
+
+# Show cache sizes
+cache-sizes
+
+# Update Homebrew packages
+brewup
+
+% tmux, terminal
+
+# New tmux session
+tmux new -s <session_name>
+
+# Attach to session
+tmux attach -t <session_name>
+
+# List sessions
+tmux list-sessions
+
+# Kill session
+tmux kill-session -t <session_name>
