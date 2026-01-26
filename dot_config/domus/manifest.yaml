@@ -34,10 +34,39 @@ packages:
       - lazygit
       - git-delta
       - git-absorb
+      # Development environments
+      - go
+      - rust
+      - ruby
+      - node
+      - uv
+      - pre-commit
+      # DevOps & containers
+      - act
+      - k9s
+      - lazydocker
+      # Security & code quality
+      - gitleaks
+      - ggshield
+      - trivy
+      - gnupg
+      - git-lfs
+      - shellcheck
+      - shfmt
+      # Media & files
+      - ffmpeg
+      - rclone
+      - qpdf
       # Shell & terminal
+      - zsh
+      - zsh-autosuggestions
+      - zsh-completions
+      - zsh-syntax-highlighting
       - fish
       - tmux
       - byobu
+      - thefuck
+      - carapace
       # Extras
       - btop
       - duf
@@ -47,20 +76,39 @@ packages:
       - tlrc
       - lolcat
       - coreutils
+      - ncdu
+      - micro
+      - glow
+      - htop
+      - hyperfine
     casks:
       - kitty
       - 1password-cli
       - visual-studio-code
+      - visual-studio-code@insiders
       - warp
+      - claude-code
+      - gcloud-cli
+      - gitkraken-cli
+      - block-goose
+      - mailmate
+      - font-jetbrains-mono-nerd-font
 
   pipx:
     - pywal
+    - pplx-cli
 
   npm_global:
     - pnpm
     - "@anthropic-ai/mcpb"
     - "@google/gemini-cli"
     - "@trunkio/launcher"
+    - "@anthropic-ai/claude-code"
+    - "@github/copilot"
+    - "@githubnext/github-copilot-cli"
+    - "@modelcontextprotocol/server-github"
+    - localtunnel
+    - "@google/jules"
 
   cargo: []
 
