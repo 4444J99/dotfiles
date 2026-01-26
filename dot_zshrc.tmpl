@@ -402,6 +402,35 @@ alias myip='curl -s https://api.ipify.org && echo'
 alias localip='ipconfig getifaddr en0'
 
 # ─────────────────────────────────────────────────────────────────────────────
+# Kitty Theme Helpers
+# ─────────────────────────────────────────────────────────────────────────────
+
+# List available kitty themes
+kthemes() {
+    ls ~/.config/kitty/themes/*.conf 2>/dev/null | xargs -n1 basename | sed 's/\.conf$//'
+}
+
+# Switch kitty theme by name
+ktheme() {
+    local theme="$1"
+    if [[ -z "$theme" ]]; then
+        echo "Usage: ktheme <theme-name>"
+        echo "Available themes:"
+        kthemes
+        return 1
+    fi
+    if [[ -f ~/.config/kitty/themes/${theme}.conf ]]; then
+        kitty @ set-colors ~/.config/kitty/themes/${theme}.conf
+        echo "Applied theme: $theme"
+    else
+        echo "Theme not found: $theme"
+        echo "Available themes:"
+        kthemes
+        return 1
+    fi
+}
+
+# ─────────────────────────────────────────────────────────────────────────────
 # Tmux Helpers
 # ─────────────────────────────────────────────────────────────────────────────
 
