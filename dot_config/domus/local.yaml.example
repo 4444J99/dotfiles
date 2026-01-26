@@ -1,0 +1,29 @@
+# ─────────────────────────────────────────────────────────────────────────────
+# Domus Local Overrides
+# Machine-specific settings that override manifest.yaml
+# Copy to local.yaml and customize
+# ─────────────────────────────────────────────────────────────────────────────
+
+# Add machine-specific packages
+packages:
+  homebrew:
+    formulae:
+      # - some-work-tool
+    casks:
+      # - some-work-app
+
+# Override sorting directories
+sorting:
+  directories:
+    # - ~/CustomDownloads
+
+# Adjust performance budgets for slower machines
+performance:
+  shell_startup:
+    warning_ms: 750
+
+# Override notification settings
+notifications:
+  quiet_hours:
+    start: "21:00"
+    end: "09:00"

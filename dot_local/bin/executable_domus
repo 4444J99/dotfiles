@@ -1,0 +1,585 @@
+#!/usr/bin/env bash
+# ─────────────────────────────────────────────────────────────────────────────
+# domus - Unified home directory management CLI
+# Domus Semper Palingenesis: The ever-regenerating home
+# ─────────────────────────────────────────────────────────────────────────────
+#
+# Usage:
+#   domus                    # Status summary
+#   domus status [--json]    # Full status report
+#   domus apply [--dry-run]  # Sync all (dotfiles + packages)
+#   domus sort [--watch]     # Run file sorter
+#   domus packages [diff|apply]  # Package management
+#   domus perf [shell]       # Performance report
+#   domus health             # Health check (wraps chezmoi-health)
+#
+# Exit codes:
+#   0 - Success
+#   1 - Issues detected (drift, warnings)
+#   2 - Error
+
+set -euo pipefail
+
+# ─────────────────────────────────────────────────────────────────────────────
+# Configuration
+# ─────────────────────────────────────────────────────────────────────────────
+
+DOMUS_VERSION="1.0.0"
+CONFIG_DIR="${HOME}/.config/domus"
+STATE_DIR="${HOME}/.local/state/domus"
+MANIFEST="${CONFIG_DIR}/manifest.yaml"
+LOCAL_CONFIG="${CONFIG_DIR}/local.yaml"
+BIN_DIR="${HOME}/.local/bin"
+
+# ─────────────────────────────────────────────────────────────────────────────
+# Colors (disabled for non-interactive or piped output)
+# ─────────────────────────────────────────────────────────────────────────────
+
+if [[ -t 1 ]]; then
+  RED='\033[0;31m'
+  GREEN='\033[0;32m'
+  YELLOW='\033[0;33m'
+  BLUE='\033[0;34m'
+  CYAN='\033[0;36m'
+  DIM='\033[0;90m'
+  BOLD='\033[1m'
+  RESET='\033[0m'
+else
+  RED='' GREEN='' YELLOW='' BLUE='' CYAN='' DIM='' BOLD='' RESET=''
+fi
+
+# ─────────────────────────────────────────────────────────────────────────────
+# Helpers
+# ─────────────────────────────────────────────────────────────────────────────
+
+die() {
+  printf "${RED}error:${RESET} %s\n" "$1" >&2
+  exit 2
+}
+
+info() {
+  printf "${BLUE}::${RESET} %s\n" "$1"
+}
+
+success() {
+  printf "${GREEN}✓${RESET} %s\n" "$1"
+}
+
+warn() {
+  printf "${YELLOW}!${RESET} %s\n" "$1"
+}
+
+check_deps() {
+  local missing=()
+  for cmd in "$@"; do
+    if ! command -v "$cmd" &>/dev/null; then
+      missing+=("$cmd")
+    fi
+  done
+  if [[ ${#missing[@]} -gt 0 ]]; then
+    die "Missing dependencies: ${missing[*]}"
+  fi
+}
+
+check_manifest() {
+  if [[ ! -f "${MANIFEST}" ]]; then
+    die "Manifest not found: ${MANIFEST}"
+  fi
+}
+
+# ─────────────────────────────────────────────────────────────────────────────
+# YAML Parser (minimal, bash-only)
+# ─────────────────────────────────────────────────────────────────────────────
+
+# Parse simple YAML value (uses yq if available, falls back to grep/sed)
+yaml_get() {
+  local file="$1"
+  local key="$2"
+
+  if command -v yq &>/dev/null; then
+    yq -r "$key" "$file" 2>/dev/null || echo ""
+  else
+    # Fallback: very basic parsing for simple keys
+    grep -E "^${key}:" "$file" 2>/dev/null | sed 's/^[^:]*: *//' | tr -d '"' || echo ""
+  fi
+}
+
+# ─────────────────────────────────────────────────────────────────────────────
+# Commands
+# ─────────────────────────────────────────────────────────────────────────────
+
+cmd_version() {
+  echo "domus ${DOMUS_VERSION}"
+}
+
+cmd_help() {
+  cat <<EOF
+${BOLD}domus${RESET} - Unified home directory management
+${DIM}Domus Semper Palingenesis: The ever-regenerating home${RESET}
+
+${BOLD}USAGE${RESET}
+    domus [COMMAND] [OPTIONS]
+
+${BOLD}COMMANDS${RESET}
+    ${CYAN}status${RESET}              Status summary (default)
+        --json          Machine-readable output
+
+    ${CYAN}apply${RESET}               Sync all (dotfiles + packages)
+        --dry-run       Preview changes only
+        --dotfiles      Only sync dotfiles (chezmoi)
+        --packages      Only sync packages
+
+    ${CYAN}sort${RESET}                Run file sorter once
+        --watch         Start FSEvents daemon
+
+    ${CYAN}packages${RESET}            Package status
+        diff            Show drift from manifest
+        apply           Install missing packages
+        --json          Machine-readable output
+
+    ${CYAN}perf${RESET}                Performance report
+        shell           Shell startup trend
+        daemon          Daemon run times
+        --json          Machine-readable output
+
+    ${CYAN}health${RESET}              Chezmoi health check
+        --json          Machine-readable output
+
+${BOLD}OPTIONS${RESET}
+    -h, --help          Show this help
+    -v, --version       Show version
+
+${BOLD}EXAMPLES${RESET}
+    domus                   # Quick status
+    domus apply --dry-run   # Preview sync
+    domus packages diff     # Show package drift
+    domus perf shell        # Shell startup times
+
+EOF
+}
+
+cmd_status() {
+  local json_mode=0
+  while [[ $# -gt 0 ]]; do
+    case "$1" in
+      --json) json_mode=1; shift ;;
+      *) shift ;;
+    esac
+  done
+
+  if [[ $json_mode -eq 1 ]]; then
+    cmd_status_json
+    return
+  fi
+
+  echo ""
+  printf "${BOLD}Domus Status${RESET} ${DIM}$(date '+%Y-%m-%d %H:%M')${RESET}\n"
+  echo ""
+
+  local exit_code=0
+
+  # Chezmoi status
+  printf "${CYAN}[dotfiles]${RESET} "
+  if command -v chezmoi &>/dev/null; then
+    local drift
+    drift=$(chezmoi diff 2>/dev/null | head -1) || drift=""
+    if [[ -z "$drift" ]]; then
+      printf "${GREEN}✓${RESET} synced\n"
+    else
+      printf "${YELLOW}!${RESET} drift detected\n"
+      exit_code=1
+    fi
+  else
+    printf "${DIM}○${RESET} chezmoi not found\n"
+  fi
+
+  # Package status
+  printf "${CYAN}[packages]${RESET} "
+  if [[ -x "${BIN_DIR}/domus-packages" ]]; then
+    local pkg_status
+    pkg_status=$("${BIN_DIR}/domus-packages" status --quiet 2>/dev/null || true)
+    case "$pkg_status" in
+      synced) printf "${GREEN}✓${RESET} synced\n" ;;
+      drift) printf "${YELLOW}!${RESET} drift detected\n"; exit_code=1 ;;
+      *) printf "${DIM}○${RESET} unknown\n" ;;
+    esac
+  else
+    printf "${DIM}○${RESET} not configured\n"
+  fi
+
+  # Sort status
+  printf "${CYAN}[sorting]${RESET}  "
+  if pgrep -qf "domus-sort.*--watch" 2>/dev/null; then
+    printf "${GREEN}✓${RESET} watching\n"
+  else
+    printf "${DIM}○${RESET} idle\n"
+  fi
+
+  # Shell startup
+  printf "${CYAN}[shell]${RESET}    "
+  local telemetry="${STATE_DIR}/telemetry/shell-startup.jsonl"
+  if [[ -f "$telemetry" ]]; then
+    local last_ms
+    last_ms=$(tail -1 "$telemetry" 2>/dev/null | grep -o '"ms":[0-9]*' | grep -o '[0-9]*') || last_ms=""
+    if [[ -n "$last_ms" ]]; then
+      local target_ms=200
+      local warning_ms=500
+      if command -v yq &>/dev/null && [[ -f "${MANIFEST}" ]]; then
+        target_ms=$(yq -r '.performance.shell_startup.target_ms // 200' "${MANIFEST}")
+        warning_ms=$(yq -r '.performance.shell_startup.warning_ms // 500' "${MANIFEST}")
+      fi
+
+      if [[ $last_ms -le $target_ms ]]; then
+        printf "${GREEN}✓${RESET} ${last_ms}ms (target: ${target_ms}ms)\n"
+      elif [[ $last_ms -le $warning_ms ]]; then
+        printf "${YELLOW}!${RESET} ${last_ms}ms (target: ${target_ms}ms)\n"
+      else
+        printf "${RED}✗${RESET} ${last_ms}ms (target: ${target_ms}ms)\n"
+        exit_code=1
+      fi
+    else
+      printf "${DIM}○${RESET} no data\n"
+    fi
+  else
+    printf "${DIM}○${RESET} not tracked\n"
+  fi
+
+  echo ""
+
+  if [[ $exit_code -eq 0 ]]; then
+    printf "${GREEN}${BOLD}All systems healthy${RESET}\n"
+  else
+    printf "${YELLOW}${BOLD}Issues detected${RESET} - run 'domus apply' to sync\n"
+  fi
+  echo ""
+
+  return $exit_code
+}
+
+cmd_status_json() {
+  local dotfiles_status="unknown"
+  local packages_status="unknown"
+  local sort_status="idle"
+  local shell_ms="null"
+
+  if command -v chezmoi &>/dev/null; then
+    if chezmoi diff 2>/dev/null | head -1 | grep -q .; then
+      dotfiles_status="drift"
+    else
+      dotfiles_status="synced"
+    fi
+  fi
+
+  if [[ -x "${BIN_DIR}/domus-packages" ]]; then
+    packages_status=$("${BIN_DIR}/domus-packages" status --quiet 2>/dev/null) || packages_status="error"
+  fi
+
+  if pgrep -qf "domus-sort.*--watch" 2>/dev/null; then
+    sort_status="watching"
+  fi
+
+  local telemetry="${STATE_DIR}/telemetry/shell-startup.jsonl"
+  if [[ -f "$telemetry" ]]; then
+    shell_ms=$(tail -1 "$telemetry" 2>/dev/null | grep -o '"ms":[0-9]*' | grep -o '[0-9]*') || shell_ms="null"
+  fi
+
+  cat <<EOF
+{
+  "timestamp": "$(date -u +"%Y-%m-%dT%H:%M:%SZ")",
+  "dotfiles": "${dotfiles_status}",
+  "packages": "${packages_status}",
+  "sorting": "${sort_status}",
+  "shell_startup_ms": ${shell_ms}
+}
+EOF
+}
+
+cmd_apply() {
+  local dry_run=0
+  local dotfiles_only=0
+  local packages_only=0
+
+  while [[ $# -gt 0 ]]; do
+    case "$1" in
+      --dry-run) dry_run=1; shift ;;
+      --dotfiles) dotfiles_only=1; shift ;;
+      --packages) packages_only=1; shift ;;
+      *) shift ;;
+    esac
+  done
+
+  local exit_code=0
+
+  # Apply dotfiles
+  if [[ $packages_only -eq 0 ]]; then
+    info "Syncing dotfiles..."
+    if [[ $dry_run -eq 1 ]]; then
+      chezmoi diff 2>/dev/null || true
+    else
+      if chezmoi apply 2>/dev/null; then
+        success "Dotfiles synced"
+      else
+        warn "Dotfiles sync had issues"
+        exit_code=1
+      fi
+    fi
+  fi
+
+  # Apply packages
+  if [[ $dotfiles_only -eq 0 ]]; then
+    info "Syncing packages..."
+    if [[ -x "${BIN_DIR}/domus-packages" ]]; then
+      if [[ $dry_run -eq 1 ]]; then
+        "${BIN_DIR}/domus-packages" diff
+      else
+        if "${BIN_DIR}/domus-packages" apply; then
+          success "Packages synced"
+        else
+          warn "Package sync had issues"
+          exit_code=1
+        fi
+      fi
+    else
+      warn "domus-packages not found, skipping"
+    fi
+  fi
+
+  return $exit_code
+}
+
+cmd_sort() {
+  local watch_mode=0
+
+  while [[ $# -gt 0 ]]; do
+    case "$1" in
+      --watch) watch_mode=1; shift ;;
+      *) shift ;;
+    esac
+  done
+
+  if [[ ! -x "${BIN_DIR}/domus-sort" ]]; then
+    die "domus-sort not found"
+  fi
+
+  if [[ $watch_mode -eq 1 ]]; then
+    exec "${BIN_DIR}/domus-sort" --watch
+  else
+    exec "${BIN_DIR}/domus-sort"
+  fi
+}
+
+cmd_packages() {
+  local subcmd="${1:-}"
+  shift 2>/dev/null || true
+
+  if [[ ! -x "${BIN_DIR}/domus-packages" ]]; then
+    die "domus-packages not found"
+  fi
+
+  case "$subcmd" in
+    diff|apply|status)
+      exec "${BIN_DIR}/domus-packages" "$subcmd" "$@"
+      ;;
+    ""|--json)
+      exec "${BIN_DIR}/domus-packages" status "$subcmd" "$@"
+      ;;
+    *)
+      exec "${BIN_DIR}/domus-packages" "$subcmd" "$@"
+      ;;
+  esac
+}
+
+cmd_perf() {
+  local subcmd="${1:-}"
+  shift 2>/dev/null || true
+  local json_mode=0
+
+  while [[ $# -gt 0 ]]; do
+    case "$1" in
+      --json) json_mode=1; shift ;;
+      *) shift ;;
+    esac
+  done
+
+  local telemetry_dir="${STATE_DIR}/telemetry"
+
+  case "$subcmd" in
+    shell)
+      cmd_perf_shell "$json_mode"
+      ;;
+    daemon)
+      cmd_perf_daemon "$json_mode"
+      ;;
+    *)
+      cmd_perf_summary "$json_mode"
+      ;;
+  esac
+}
+
+cmd_perf_shell() {
+  local json_mode="$1"
+  local telemetry="${STATE_DIR}/telemetry/shell-startup.jsonl"
+
+  if [[ ! -f "$telemetry" ]]; then
+    if [[ $json_mode -eq 1 ]]; then
+      echo '{"error": "no data"}'
+    else
+      warn "No shell startup data found"
+    fi
+    return 1
+  fi
+
+  if [[ $json_mode -eq 1 ]]; then
+    # Return last 10 entries as JSON array
+    echo "["
+    tail -10 "$telemetry" | while read -r line; do
+      echo "  $line,"
+    done | sed '$ s/,$//'
+    echo "]"
+    return
+  fi
+
+  echo ""
+  printf "${BOLD}Shell Startup Times${RESET} ${DIM}(last 10)${RESET}\n"
+  echo ""
+
+  local target_ms=200
+  local warning_ms=500
+  if command -v yq &>/dev/null && [[ -f "${MANIFEST}" ]]; then
+    target_ms=$(yq -r '.performance.shell_startup.target_ms // 200' "${MANIFEST}")
+    warning_ms=$(yq -r '.performance.shell_startup.warning_ms // 500' "${MANIFEST}")
+  fi
+
+  tail -10 "$telemetry" | while read -r line; do
+    local ts ms
+    ts=$(echo "$line" | grep -o '"timestamp":"[^"]*"' | cut -d'"' -f4)
+    ms=$(echo "$line" | grep -o '"ms":[0-9]*' | grep -o '[0-9]*')
+
+    local color="$GREEN"
+    [[ $ms -gt $target_ms ]] && color="$YELLOW"
+    [[ $ms -gt $warning_ms ]] && color="$RED"
+
+    printf "  ${DIM}%s${RESET}  ${color}%4dms${RESET}\n" "$ts" "$ms"
+  done
+
+  echo ""
+  printf "  Target: ${GREEN}≤${target_ms}ms${RESET}  Warning: ${YELLOW}>${target_ms}ms${RESET}  Critical: ${RED}>${warning_ms}ms${RESET}\n"
+  echo ""
+}
+
+cmd_perf_daemon() {
+  local json_mode="$1"
+  local telemetry="${STATE_DIR}/telemetry/daemon-runs.jsonl"
+
+  if [[ ! -f "$telemetry" ]]; then
+    if [[ $json_mode -eq 1 ]]; then
+      echo '{"error": "no data"}'
+    else
+      warn "No daemon run data found"
+    fi
+    return 1
+  fi
+
+  if [[ $json_mode -eq 1 ]]; then
+    echo "["
+    tail -10 "$telemetry" | while read -r line; do
+      echo "  $line,"
+    done | sed '$ s/,$//'
+    echo "]"
+    return
+  fi
+
+  echo ""
+  printf "${BOLD}Daemon Run Times${RESET} ${DIM}(last 10)${RESET}\n"
+  echo ""
+
+  tail -10 "$telemetry" | while read -r line; do
+    local ts ms
+    ts=$(echo "$line" | grep -o '"timestamp":"[^"]*"' | cut -d'"' -f4)
+    ms=$(echo "$line" | grep -o '"ms":[0-9]*' | grep -o '[0-9]*')
+    printf "  ${DIM}%s${RESET}  %dms\n" "$ts" "$ms"
+  done
+  echo ""
+}
+
+cmd_perf_summary() {
+  local json_mode="$1"
+
+  if [[ $json_mode -eq 1 ]]; then
+    local shell_avg=0
+    local daemon_avg=0
+    local shell_telemetry="${STATE_DIR}/telemetry/shell-startup.jsonl"
+    local daemon_telemetry="${STATE_DIR}/telemetry/daemon-runs.jsonl"
+
+    if [[ -f "$shell_telemetry" ]]; then
+      shell_avg=$(tail -10 "$shell_telemetry" | grep -o '"ms":[0-9]*' | grep -o '[0-9]*' | awk '{s+=$1; n++} END {print int(s/n)}')
+    fi
+    if [[ -f "$daemon_telemetry" ]]; then
+      daemon_avg=$(tail -10 "$daemon_telemetry" | grep -o '"ms":[0-9]*' | grep -o '[0-9]*' | awk '{s+=$1; n++} END {print int(s/n)}')
+    fi
+
+    cat <<EOF
+{
+  "shell_startup_avg_ms": ${shell_avg:-0},
+  "daemon_run_avg_ms": ${daemon_avg:-0}
+}
+EOF
+    return
+  fi
+
+  echo ""
+  printf "${BOLD}Performance Summary${RESET}\n"
+  echo ""
+
+  cmd_perf_shell 0
+  cmd_perf_daemon 0
+}
+
+cmd_health() {
+  if [[ -x "${BIN_DIR}/chezmoi-health" ]]; then
+    exec "${BIN_DIR}/chezmoi-health" "$@"
+  else
+    die "chezmoi-health not found"
+  fi
+}
+
+# ─────────────────────────────────────────────────────────────────────────────
+# Main
+# ─────────────────────────────────────────────────────────────────────────────
+
+main() {
+  local cmd="${1:-status}"
+  shift 2>/dev/null || true
+
+  case "$cmd" in
+    -h|--help|help)
+      cmd_help
+      ;;
+    -v|--version|version)
+      cmd_version
+      ;;
+    status)
+      cmd_status "$@"
+      ;;
+    apply)
+      cmd_apply "$@"
+      ;;
+    sort)
+      cmd_sort "$@"
+      ;;
+    packages|pkg)
+      cmd_packages "$@"
+      ;;
+    perf|performance)
+      cmd_perf "$@"
+      ;;
+    health)
+      cmd_health "$@"
+      ;;
+    *)
+      die "Unknown command: $cmd (try 'domus --help')"
+      ;;
+  esac
+}
+
+main "$@"

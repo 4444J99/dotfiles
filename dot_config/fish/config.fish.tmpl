@@ -4,6 +4,13 @@
 
 if status is-interactive
     # ─────────────────────────────────────────────────────────────────────────
+    # Startup Timing (Domus Telemetry)
+    # ─────────────────────────────────────────────────────────────────────────
+
+    # Record start time for performance tracking
+    set -g _domus_shell_start_ms (perl -MTime::HiRes=time -e 'printf "%d", time * 1000' 2>/dev/null; or echo 0)
+
+    # ─────────────────────────────────────────────────────────────────────────
     # PATH Configuration
     # ─────────────────────────────────────────────────────────────────────────
 
@@ -226,6 +233,50 @@ if status is-interactive
     if command -q just
         alias j just
     end
+
+    # ─────────────────────────────────────────────────────────────────────────
+    # Domus Aliases
+    # ─────────────────────────────────────────────────────────────────────────
+
+    abbr -a dm domus
+    abbr -a dms 'domus status'
+    abbr -a dma 'domus apply'
+    abbr -a dmp 'domus packages'
+    abbr -a dmpd 'domus packages diff'
+
+    # ─────────────────────────────────────────────────────────────────────────
+    # Startup Timing - Record (Domus Telemetry)
+    # ─────────────────────────────────────────────────────────────────────────
+
+    # Record shell startup time asynchronously
+    if test -n "$_domus_shell_start_ms" -a "$_domus_shell_start_ms" != "0"
+        fish -c '
+            set -l end_ms (perl -MTime::HiRes=time -e "printf \"%d\", time * 1000" 2>/dev/null; or echo 0)
+            if test "$end_ms" != "0"
+                set -l duration (math "$end_ms - '$_domus_shell_start_ms'")
+                set -l telemetry_dir "$HOME/.local/state/domus/telemetry"
+                set -l telemetry_file "$telemetry_dir/shell-startup.jsonl"
+
+                # Only record if reasonable (< 30 seconds)
+                if test $duration -gt 0 -a $duration -lt 30000
+                    mkdir -p "$telemetry_dir"
+                    set -l ts (date -u +"%Y-%m-%dT%H:%M:%SZ")
+                    echo "{\"timestamp\":\"$ts\",\"ms\":$duration}" >> "$telemetry_file"
+
+                    # Keep file under 100 entries
+                    if test -f "$telemetry_file"
+                        set -l lines (wc -l < "$telemetry_file" | string trim)
+                        if test $lines -gt 100
+                            tail -50 "$telemetry_file" > "$telemetry_file.tmp"
+                            mv "$telemetry_file.tmp" "$telemetry_file"
+                        end
+                    end
+                end
+            end
+        ' &
+        disown
+    end
+    set -e _domus_shell_start_ms
 
 end
 

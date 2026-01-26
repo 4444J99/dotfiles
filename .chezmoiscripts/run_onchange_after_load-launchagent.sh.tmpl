@@ -1,48 +1,74 @@
 #!/bin/bash
-# Load/reload the chezmoi self-heal launchd agent
-# Runs when the plist file changes
+# Load/reload launchd agents (chezmoi + domus)
+# Runs when plist files change
 
 {{- if eq .chezmoi.os "darwin" }}
 
 set -e
 
-PLIST_PATH="${HOME}/Library/LaunchAgents/com.chezmoi.self-heal.plist"
-LABEL="com.chezmoi.self-heal"
+echo "Managing launchd agents..."
 
-echo "🔄 Managing chezmoi self-heal daemon..."
-
-# Ensure state directory exists
+# Ensure state directories exist
 mkdir -p "${HOME}/.local/share/chezmoi-health"
+mkdir -p "${HOME}/.local/state/domus/telemetry"
 
-# Unload if already loaded (ignore errors if not loaded)
-if launchctl list "${LABEL}" &>/dev/null; then
-  echo "  Unloading existing agent..."
-  launchctl unload "${PLIST_PATH}" 2>/dev/null || true
-fi
+# Function to load/reload an agent
+load_agent() {
+  local plist_path="$1"
+  local label="$2"
+  local name="$3"
 
-# Load the agent
-if [[ -f "${PLIST_PATH}" ]]; then
-  echo "  Loading launchd agent..."
-  launchctl load "${PLIST_PATH}"
+  echo ""
+  echo ":: $name"
 
-  # Verify it's running
-  if launchctl list "${LABEL}" &>/dev/null; then
-    echo "  ✅ Agent loaded successfully"
-  else
-    echo "  ⚠️  Agent may not have started (check 'launchctl list | grep chezmoi')"
+  if [[ ! -f "${plist_path}" ]]; then
+    echo "   Plist not found, skipping"
+    return 0
   fi
-else
-  echo "  ⚠️  Plist not found at ${PLIST_PATH}"
-fi
+
+  # Unload if already loaded
+  if launchctl list "${label}" &>/dev/null; then
+    echo "   Unloading existing agent..."
+    launchctl unload "${plist_path}" 2>/dev/null || true
+  fi
+
+  # Load the agent
+  echo "   Loading agent..."
+  if launchctl load "${plist_path}"; then
+    if launchctl list "${label}" &>/dev/null; then
+      echo "   Loaded successfully"
+    else
+      echo "   WARNING: Agent may not have started"
+    fi
+  else
+    echo "   ERROR: Failed to load agent"
+  fi
+}
+
+# Load chezmoi self-heal agent
+load_agent \
+  "${HOME}/Library/LaunchAgents/com.chezmoi.self-heal.plist" \
+  "com.chezmoi.self-heal" \
+  "chezmoi-daemon (4hr drift check)"
+
+# Load domus daemon agent
+load_agent \
+  "${HOME}/Library/LaunchAgents/com.domus.daemon.plist" \
+  "com.domus.daemon" \
+  "domus-daemon (hourly orchestrator)"
+
+# Load domus file sorter agent
+load_agent \
+  "${HOME}/Library/LaunchAgents/com.domus.sort.plist" \
+  "com.domus.sort" \
+  "domus-sort (file watcher)"
 
 echo ""
-echo "Daemon management commands:"
-echo "  Status:  launchctl list | grep chezmoi"
-echo "  Stop:    launchctl unload ${PLIST_PATH}"
-echo "  Start:   launchctl load ${PLIST_PATH}"
-echo "  Logs:    tail -f ~/.local/share/chezmoi-health/daemon.log"
+echo "Management commands:"
+echo "  Status:  launchctl list | grep -E 'chezmoi|domus'"
+echo "  Logs:    tail -f ~/.local/state/domus/*.log"
 echo ""
 
 {{- else }}
-echo "ℹ️  Skipping launchd setup (not macOS)"
+echo "Skipping launchd setup (not macOS)"
 {{- end }}

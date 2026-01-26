@@ -1,0 +1,164 @@
+# ─────────────────────────────────────────────────────────────────────────────
+# Domus Semper Palingenesis - Unified Manifest
+# The ever-regenerating home: tracks state, auto-organizes, heals drift
+# ─────────────────────────────────────────────────────────────────────────────
+
+schema_version: 2
+
+# ─────────────────────────────────────────────────────────────────────────────
+# Package Management
+# ─────────────────────────────────────────────────────────────────────────────
+
+packages:
+  homebrew:
+    formulae:
+      # Core tools
+      - chezmoi
+      - git
+      - gh
+      - neovim
+      - fzf
+      - fd
+      - ripgrep
+      - bat
+      - eza
+      - zoxide
+      - starship
+      - atuin
+      - direnv
+      - mise
+      # Development
+      - jq
+      - yq
+      - just
+      - lazygit
+      - git-delta
+      - git-absorb
+      # Shell & terminal
+      - fish
+      - tmux
+      - byobu
+      # Extras
+      - btop
+      - duf
+      - entr
+      - fswatch
+      - navi
+      - tlrc
+      - lolcat
+      - coreutils
+    casks:
+      - kitty
+      - 1password-cli
+      - visual-studio-code
+      - warp
+
+  pipx:
+    - pywal
+
+  npm_global:
+    - pnpm
+    - "@anthropic-ai/mcpb"
+    - "@google/gemini-cli"
+    - "@trunkio/launcher"
+
+  cargo: []
+
+# ─────────────────────────────────────────────────────────────────────────────
+# File Sorting Rules
+# ─────────────────────────────────────────────────────────────────────────────
+
+sorting:
+  directories:
+    - ~/Downloads
+    - ~/Desktop
+
+  rules:
+    # Screenshots from Desktop
+    - name: screenshots
+      match:
+        pattern: "Screenshot*.png"
+        location: ~/Desktop
+      action:
+        move_to: "~/Pictures/Screenshots/{year}/{month}/"
+
+    # PDFs anywhere
+    - name: pdfs
+      match:
+        extension: [pdf]
+      action:
+        move_to: "~/Documents/PDFs/{year}/"
+        rename: "{smart_name}"
+
+    # DMG installers
+    - name: installers
+      match:
+        extension: [dmg, pkg]
+      action:
+        move_to: "~/Downloads/_Installers/"
+
+    # Archives
+    - name: archives
+      match:
+        extension: [zip, tar, gz, 7z, rar]
+      action:
+        move_to: "~/Downloads/_Archives/{year}/"
+
+    # Images
+    - name: images
+      match:
+        extension: [jpg, jpeg, png, gif, webp, heic]
+        location: ~/Downloads
+      action:
+        move_to: "~/Pictures/Downloads/{year}/{month}/"
+
+    # Old downloads (archive after 30 days)
+    - name: old-downloads
+      match:
+        age_days_min: 30
+        location: ~/Downloads
+        exclude_pattern: "^_"
+      action:
+        move_to: "~/Downloads/_Archive/{year}/"
+
+# ─────────────────────────────────────────────────────────────────────────────
+# Performance Budgets
+# ─────────────────────────────────────────────────────────────────────────────
+
+performance:
+  shell_startup:
+    target_ms: 200
+    warning_ms: 500
+    critical_ms: 1000
+
+  daemon_run:
+    target_ms: 5000
+    warning_ms: 15000
+    critical_ms: 60000
+
+# ─────────────────────────────────────────────────────────────────────────────
+# Notification Settings
+# ─────────────────────────────────────────────────────────────────────────────
+
+notifications:
+  levels:
+    silent:
+      - sorting.file_moved
+      - health.check_passed
+      - packages.check_passed
+    quiet:
+      - sorting.rule_matched: 10  # Batch after 10 events
+      - packages.minor_drift
+    normal:
+      - packages.update_available
+      - sorting.error
+      - health.drift_detected
+    urgent:
+      - health.critical_failure
+      - packages.major_drift
+
+  quiet_hours:
+    start: "22:00"
+    end: "08:00"
+
+  batch_delay_seconds: 30

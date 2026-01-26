@@ -1,0 +1,377 @@
+#!/usr/bin/env bash
+# ─────────────────────────────────────────────────────────────────────────────
+# domus-notify - Tiered notification dispatcher
+# ─────────────────────────────────────────────────────────────────────────────
+#
+# Sends notifications respecting tiers, quiet hours, and batching rules.
+#
+# Usage:
+#   domus-notify --level normal --title "Title" --message "Message"
+#   domus-notify --event health.drift_detected --message "Drift found"
+#   domus-notify --flush   # Send batched notifications
+#
+# Levels: silent < quiet < normal < urgent
+#
+# Exit codes:
+#   0 - Success (or silenced)
+#   1 - Failed to send
+#   2 - Error
+
+set -euo pipefail
+
+# ─────────────────────────────────────────────────────────────────────────────
+# Configuration
+# ─────────────────────────────────────────────────────────────────────────────
+
+CONFIG_DIR="${HOME}/.config/domus"
+STATE_DIR="${HOME}/.local/state/domus"
+MANIFEST="${CONFIG_DIR}/manifest.yaml"
+BATCH_FILE="${STATE_DIR}/notification-batch.json"
+BATCH_LOCK="${STATE_DIR}/notification-batch.lock"
+
+# ─────────────────────────────────────────────────────────────────────────────
+# Helpers
+# ─────────────────────────────────────────────────────────────────────────────
+
+die() {
+  echo "error: $1" >&2
+  exit 2
+}
+
+# Check if we're in quiet hours
+is_quiet_hours() {
+  if [[ ! -f "${MANIFEST}" ]] || ! command -v yq &>/dev/null; then
+    return 1  # Not in quiet hours if we can't check
+  fi
+
+  local start_time end_time
+  start_time=$(yq -r '.notifications.quiet_hours.start // "22:00"' "${MANIFEST}")
+  end_time=$(yq -r '.notifications.quiet_hours.end // "08:00"' "${MANIFEST}")
+
+  local now_minutes start_minutes end_minutes
+  now_minutes=$(date +%H | sed 's/^0//')*60+$(date +%M | sed 's/^0//')
+
+  local start_h start_m end_h end_m
+  start_h=$(echo "$start_time" | cut -d: -f1 | sed 's/^0//')
+  start_m=$(echo "$start_time" | cut -d: -f2 | sed 's/^0//')
+  end_h=$(echo "$end_time" | cut -d: -f1 | sed 's/^0//')
+  end_m=$(echo "$end_time" | cut -d: -f2 | sed 's/^0//')
+
+  start_minutes=$((start_h * 60 + start_m))
+  end_minutes=$((end_h * 60 + end_m))
+  now_minutes=$(($(date +%H | sed 's/^0//') * 60 + $(date +%M | sed 's/^0//')))
+
+  if [[ $start_minutes -gt $end_minutes ]]; then
+    # Quiet hours span midnight
+    [[ $now_minutes -ge $start_minutes || $now_minutes -lt $end_minutes ]]
+  else
+    # Same day quiet hours
+    [[ $now_minutes -ge $start_minutes && $now_minutes -lt $end_minutes ]]
+  fi
+}
+
+# Get notification level for an event
+get_event_level() {
+  local event="$1"
+
+  if [[ ! -f "${MANIFEST}" ]] || ! command -v yq &>/dev/null; then
+    echo "normal"
+    return
+  fi
+
+  # Check each level for the event
+  for level in silent quiet normal urgent; do
+    if yq -e ".notifications.levels.${level}[] | select(. == \"${event}\" or has(\"${event}\"))" "${MANIFEST}" &>/dev/null; then
+      echo "$level"
+      return
+    fi
+  done
+
+  echo "normal"
+}
+
+# Get batch threshold for an event (0 = no batching)
+get_batch_threshold() {
+  local event="$1"
+
+  if [[ ! -f "${MANIFEST}" ]] || ! command -v yq &>/dev/null; then
+    echo "0"
+    return
+  fi
+
+  # Check quiet level for batch thresholds
+  local threshold
+  threshold=$(yq -r ".notifications.levels.quiet[] | select(has(\"${event}\")) | .[\"${event}\"] // 0" "${MANIFEST}" 2>/dev/null)
+
+  echo "${threshold:-0}"
+}
+
+# ─────────────────────────────────────────────────────────────────────────────
+# macOS Notification
+# ─────────────────────────────────────────────────────────────────────────────
+
+send_notification() {
+  local title="$1"
+  local message="$2"
+  local subtitle="${3:-}"
+
+  osascript -e "display notification \"${message}\" with title \"${title}\" subtitle \"${subtitle}\"" 2>/dev/null || return 1
+}
+
+# ─────────────────────────────────────────────────────────────────────────────
+# Batching
+# ─────────────────────────────────────────────────────────────────────────────
+
+add_to_batch() {
+  local event="$1"
+  local message="$2"
+
+  mkdir -p "${STATE_DIR}"
+
+  # Simple lock
+  local lock_acquired=0
+  for i in {1..5}; do
+    if mkdir "${BATCH_LOCK}" 2>/dev/null; then
+      lock_acquired=1
+      break
+    fi
+    sleep 0.1
+  done
+
+  if [[ $lock_acquired -eq 0 ]]; then
+    return 1
+  fi
+
+  trap 'rmdir "${BATCH_LOCK}" 2>/dev/null' EXIT
+
+  # Read or create batch file
+  local batch_data='{}'
+  if [[ -f "${BATCH_FILE}" ]]; then
+    batch_data=$(cat "${BATCH_FILE}")
+  fi
+
+  # Add event to batch
+  local timestamp
+  timestamp=$(date -u +"%Y-%m-%dT%H:%M:%SZ")
+
+  local count
+  count=$(echo "$batch_data" | jq -r ".events[\"${event}\"].count // 0")
+  count=$((count + 1))
+
+  batch_data=$(echo "$batch_data" | jq \
+    --arg event "$event" \
+    --arg msg "$message" \
+    --arg ts "$timestamp" \
+    --argjson count "$count" \
+    '.events[$event] = {"count": $count, "last_message": $msg, "last_timestamp": $ts}')
+
+  echo "$batch_data" > "${BATCH_FILE}"
+
+  rmdir "${BATCH_LOCK}" 2>/dev/null
+  trap - EXIT
+}
+
+get_batch_count() {
+  local event="$1"
+
+  if [[ ! -f "${BATCH_FILE}" ]]; then
+    echo "0"
+    return
+  fi
+
+  jq -r ".events[\"${event}\"].count // 0" "${BATCH_FILE}"
+}
+
+flush_batch() {
+  if [[ ! -f "${BATCH_FILE}" ]]; then
+    return 0
+  fi
+
+  # Simple lock
+  if ! mkdir "${BATCH_LOCK}" 2>/dev/null; then
+    return 1
+  fi
+  trap 'rmdir "${BATCH_LOCK}" 2>/dev/null' EXIT
+
+  local batch_data
+  batch_data=$(cat "${BATCH_FILE}")
+
+  # Get all events with counts
+  local events
+  events=$(echo "$batch_data" | jq -r '.events | keys[]' 2>/dev/null)
+
+  while IFS= read -r event; do
+    [[ -z "$event" ]] && continue
+
+    local count msg
+    count=$(echo "$batch_data" | jq -r ".events[\"${event}\"].count // 0")
+    msg=$(echo "$batch_data" | jq -r ".events[\"${event}\"].last_message // \"\"")
+
+    if [[ $count -gt 0 ]]; then
+      local title="Domus"
+      [[ "$event" == sorting.* ]] && title="File Sorter"
+      [[ "$event" == packages.* ]] && title="Packages"
+      [[ "$event" == health.* ]] && title="Health Check"
+
+      if [[ $count -eq 1 ]]; then
+        send_notification "$title" "$msg"
+      else
+        send_notification "$title" "${count} events: ${msg}"
+      fi
+    fi
+  done <<< "$events"
+
+  # Clear batch
+  echo '{"events": {}}' > "${BATCH_FILE}"
+
+  rmdir "${BATCH_LOCK}" 2>/dev/null
+  trap - EXIT
+}
+
+# ─────────────────────────────────────────────────────────────────────────────
+# Main Logic
+# ─────────────────────────────────────────────────────────────────────────────
+
+send_or_batch() {
+  local level="$1"
+  local event="$2"
+  local title="$3"
+  local message="$4"
+
+  # Determine effective level
+  local effective_level="$level"
+  if [[ -n "$event" ]]; then
+    effective_level=$(get_event_level "$event")
+  fi
+
+  # Handle based on level
+  case "$effective_level" in
+    silent)
+      # Don't notify at all
+      return 0
+      ;;
+    quiet)
+      # Check batching threshold
+      local threshold
+      threshold=$(get_batch_threshold "$event")
+
+      if [[ $threshold -gt 0 ]]; then
+        add_to_batch "$event" "$message"
+        local count
+        count=$(get_batch_count "$event")
+
+        if [[ $count -ge $threshold ]]; then
+          flush_batch
+        fi
+        return 0
+      fi
+
+      # Quiet but no batching - check quiet hours
+      if is_quiet_hours; then
+        add_to_batch "$event" "$message"
+        return 0
+      fi
+      ;;
+    normal)
+      # Check quiet hours
+      if is_quiet_hours; then
+        add_to_batch "$event" "$message"
+        return 0
+      fi
+      ;;
+    urgent)
+      # Always send immediately, ignore quiet hours
+      ;;
+  esac
+
+  # Send notification
+  send_notification "$title" "$message"
+}
+
+# ─────────────────────────────────────────────────────────────────────────────
+# Main
+# ─────────────────────────────────────────────────────────────────────────────
+
+main() {
+  local level="normal"
+  local event=""
+  local title="Domus"
+  local message=""
+  local do_flush=0
+
+  while [[ $# -gt 0 ]]; do
+    case "$1" in
+      --level|-l)
+        level="$2"
+        shift 2
+        ;;
+      --event|-e)
+        event="$2"
+        shift 2
+        ;;
+      --title|-t)
+        title="$2"
+        shift 2
+        ;;
+      --message|-m)
+        message="$2"
+        shift 2
+        ;;
+      --flush)
+        do_flush=1
+        shift
+        ;;
+      -h|--help)
+        cat <<EOF
+domus-notify - Tiered notification dispatcher
+
+Usage:
+  domus-notify --level normal --title "Title" --message "Message"
+  domus-notify --event health.drift_detected --message "Drift found"
+  domus-notify --flush
+
+Options:
+  --level, -l    Notification level (silent|quiet|normal|urgent)
+  --event, -e    Event type for auto-level detection
+  --title, -t    Notification title (default: Domus)
+  --message, -m  Notification message
+  --flush        Send all batched notifications
+
+Levels:
+  silent   Never notify
+  quiet    Batch notifications, respect quiet hours
+  normal   Send immediately unless quiet hours
+  urgent   Always send immediately
+EOF
+        exit 0
+        ;;
+      *)
+        shift
+        ;;
+    esac
+  done
+
+  mkdir -p "${STATE_DIR}"
+
+  if [[ $do_flush -eq 1 ]]; then
+    flush_batch
+    exit 0
+  fi
+
+  if [[ -z "$message" ]]; then
+    die "Message required (--message)"
+  fi
+
+  # Derive title from event if not specified
+  if [[ "$title" == "Domus" && -n "$event" ]]; then
+    case "$event" in
+      sorting.*) title="File Sorter" ;;
+      packages.*) title="Packages" ;;
+      health.*) title="Health Check" ;;
+    esac
+  fi
+
+  send_or_batch "$level" "$event" "$title" "$message"
+}
+
+main "$@"

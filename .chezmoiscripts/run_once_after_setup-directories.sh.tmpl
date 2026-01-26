@@ -19,6 +19,10 @@ mkdir -p ~/Documents/{Work,Personal,Archive,Notes}
 mkdir -p ~/.local/share/file-context/{manifests,links}
 mkdir -p ~/.local/share/file-context/links/{by-type,by-project,by-year,by-status}
 
+# Domus state directories
+mkdir -p ~/.local/state/domus/{telemetry,snapshots}
+mkdir -p ~/.config/domus
+
 # SSH
 mkdir -p ~/.ssh/sockets
 chmod 700 ~/.ssh
@@ -79,10 +83,10 @@ else
 fi
 
 echo ""
-echo "🎉 Setup complete!"
+echo "Setup complete!"
 echo ""
 echo "Next steps:"
 echo "  1. Sign in to 1Password CLI: op signin"
-echo "  2. Create AWS/GitHub items in 1Password if needed"
-echo "  3. Reload shell: exec zsh"
-echo "  4. Verify aliases work: cms (chezmoi status)"
+echo "  2. Reload shell: exec zsh"
+echo "  3. Verify aliases work: cms (chezmoi status)"
+echo "  4. Check domus status: domus status"

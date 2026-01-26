@@ -1,0 +1,287 @@
+#!/usr/bin/env bash
+# ─────────────────────────────────────────────────────────────────────────────
+# domus-daemon - Orchestrator daemon for Domus home management
+# ─────────────────────────────────────────────────────────────────────────────
+#
+# Runs periodically to:
+#   1. Check dotfile drift (chezmoi)
+#   2. Check package drift
+#   3. Run file sorter
+#   4. Record telemetry
+#   5. Send notifications
+#
+# Usage:
+#   domus-daemon              # Normal run
+#   domus-daemon --force      # Skip idle check
+#   domus-daemon --verbose    # Detailed output
+#
+# Exit codes:
+#   0 - Success
+#   1 - Issues detected (drift, etc.)
+#   2 - Error
+#   3 - Skipped (user active, etc.)
+
+set -euo pipefail
+
+# ─────────────────────────────────────────────────────────────────────────────
+# Configuration
+# ─────────────────────────────────────────────────────────────────────────────
+
+CONFIG_DIR="${HOME}/.config/domus"
+STATE_DIR="${HOME}/.local/state/domus"
+BIN_DIR="${HOME}/.local/bin"
+MANIFEST="${CONFIG_DIR}/manifest.yaml"
+LOG_FILE="${STATE_DIR}/daemon.log"
+LOCK_FILE="${STATE_DIR}/daemon.lock"
+TELEMETRY_DIR="${STATE_DIR}/telemetry"
+
+# Defaults
+ONLY_WHEN_IDLE=true
+IDLE_THRESHOLD_SECONDS=300  # 5 minutes
+MIN_INTERVAL_SECONDS=3600   # 1 hour
+MAX_LOG_SIZE=1048576        # 1MB
+
+# Runtime flags
+FORCE_RUN=0
+VERBOSE=0
+
+# ─────────────────────────────────────────────────────────────────────────────
+# Parse arguments
+# ─────────────────────────────────────────────────────────────────────────────
+
+while [[ $# -gt 0 ]]; do
+  case "$1" in
+    --force|-f) FORCE_RUN=1; shift ;;
+    --verbose|-v) VERBOSE=1; shift ;;
+    --help|-h)
+      echo "Usage: domus-daemon [--force] [--verbose]"
+      exit 0
+      ;;
+    *) shift ;;
+  esac
+done
+
+# ─────────────────────────────────────────────────────────────────────────────
+# Logging
+# ─────────────────────────────────────────────────────────────────────────────
+
+mkdir -p "${STATE_DIR}"
+mkdir -p "${TELEMETRY_DIR}"
+
+log() {
+  local level="$1"
+  shift
+  local timestamp
+  timestamp=$(date '+%Y-%m-%d %H:%M:%S')
+  echo "[${timestamp}] [${level}] $*" >> "${LOG_FILE}"
+
+  if [[ $VERBOSE -eq 1 ]] || [[ -t 1 ]]; then
+    echo "[${level}] $*"
+  fi
+}
+
+log_rotate() {
+  if [[ -f "${LOG_FILE}" ]]; then
+    local size
+    size=$(stat -f%z "${LOG_FILE}" 2>/dev/null || stat -c%s "${LOG_FILE}" 2>/dev/null || echo 0)
+    if [[ ${size} -gt ${MAX_LOG_SIZE} ]]; then
+      mv "${LOG_FILE}" "${LOG_FILE}.old"
+      log "INFO" "Log rotated"
+    fi
+  fi
+}
+
+# ─────────────────────────────────────────────────────────────────────────────
+# Lock management
+# ─────────────────────────────────────────────────────────────────────────────
+
+acquire_lock() {
+  if [[ -f "${LOCK_FILE}" ]]; then
+    local pid
+    pid=$(cat "${LOCK_FILE}")
+    if kill -0 "${pid}" 2>/dev/null; then
+      log "WARN" "Another instance running (PID ${pid})"
+      return 1
+    fi
+    rm -f "${LOCK_FILE}"
+  fi
+
+  echo $$ > "${LOCK_FILE}"
+  trap 'rm -f "${LOCK_FILE}"' EXIT
+  return 0
+}
+
+# ─────────────────────────────────────────────────────────────────────────────
+# Idle detection (macOS)
+# ─────────────────────────────────────────────────────────────────────────────
+
+check_idle() {
+  if [[ "$(uname)" != "Darwin" ]]; then
+    return 0  # Skip on non-macOS
+  fi
+
+  local idle_time
+  idle_time=$(ioreg -c IOHIDSystem | awk -F'= ' '/HIDIdleTime/ {print int($2/1000000000); exit}')
+
+  if [[ ${idle_time} -lt ${IDLE_THRESHOLD_SECONDS} ]]; then
+    log "INFO" "User active (idle: ${idle_time}s < ${IDLE_THRESHOLD_SECONDS}s)"
+    return 1
+  fi
+
+  return 0
+}
+
+# ─────────────────────────────────────────────────────────────────────────────
+# Telemetry
+# ─────────────────────────────────────────────────────────────────────────────
+
+record_daemon_run() {
+  local duration_ms="$1"
+  local status="$2"
+
+  local timestamp
+  timestamp=$(date -u +"%Y-%m-%dT%H:%M:%SZ")
+
+  echo "{\"timestamp\":\"${timestamp}\",\"ms\":${duration_ms},\"status\":\"${status}\"}" \
+    >> "${TELEMETRY_DIR}/daemon-runs.jsonl"
+
+  # Keep file under 100 entries
+  if [[ -f "${TELEMETRY_DIR}/daemon-runs.jsonl" ]]; then
+    local lines
+    lines=$(wc -l < "${TELEMETRY_DIR}/daemon-runs.jsonl")
+    if [[ $lines -gt 100 ]]; then
+      tail -50 "${TELEMETRY_DIR}/daemon-runs.jsonl" > "${TELEMETRY_DIR}/daemon-runs.jsonl.tmp"
+      mv "${TELEMETRY_DIR}/daemon-runs.jsonl.tmp" "${TELEMETRY_DIR}/daemon-runs.jsonl"
+    fi
+  fi
+}
+
+# ─────────────────────────────────────────────────────────────────────────────
+# Checks
+# ─────────────────────────────────────────────────────────────────────────────
+
+check_dotfiles() {
+  log "INFO" "Checking dotfiles..."
+
+  if ! command -v chezmoi &>/dev/null; then
+    log "WARN" "chezmoi not found"
+    return 0
+  fi
+
+  local drift
+  drift=$(chezmoi diff 2>/dev/null | head -1) || drift=""
+
+  if [[ -n "$drift" ]]; then
+    log "WARN" "Dotfile drift detected"
+
+    if [[ -x "${BIN_DIR}/domus-notify" ]]; then
+      "${BIN_DIR}/domus-notify" \
+        --event "health.drift_detected" \
+        --message "Dotfile drift detected. Run 'domus apply'" &
+    fi
+
+    return 1
+  fi
+
+  log "INFO" "Dotfiles synced"
+  return 0
+}
+
+check_packages() {
+  log "INFO" "Checking packages..."
+
+  if [[ ! -x "${BIN_DIR}/domus-packages" ]]; then
+    log "WARN" "domus-packages not found"
+    return 0
+  fi
+
+  local status
+  status=$("${BIN_DIR}/domus-packages" status --quiet 2>/dev/null) || status="error"
+
+  if [[ "$status" != "synced" ]]; then
+    log "WARN" "Package drift detected"
+
+    if [[ -x "${BIN_DIR}/domus-notify" ]]; then
+      "${BIN_DIR}/domus-notify" \
+        --event "packages.minor_drift" \
+        --message "Package drift detected. Run 'domus packages diff'" &
+    fi
+
+    return 1
+  fi
+
+  log "INFO" "Packages synced"
+  return 0
+}
+
+run_sorter() {
+  log "INFO" "Running file sorter..."
+
+  if [[ ! -x "${BIN_DIR}/domus-sort" ]]; then
+    log "WARN" "domus-sort not found"
+    return 0
+  fi
+
+  "${BIN_DIR}/domus-sort" 2>/dev/null || true
+  log "INFO" "File sorter complete"
+}
+
+# ─────────────────────────────────────────────────────────────────────────────
+# Main
+# ─────────────────────────────────────────────────────────────────────────────
+
+main() {
+  local start_time
+  start_time=$(date +%s%3N 2>/dev/null || echo $(($(date +%s) * 1000)))
+
+  log_rotate
+  log "INFO" "Daemon started (force=${FORCE_RUN})"
+
+  # Acquire lock
+  if ! acquire_lock; then
+    exit 3
+  fi
+
+  # Check idle (unless forced)
+  if [[ ${FORCE_RUN} -eq 0 ]] && [[ "${ONLY_WHEN_IDLE}" == "true" ]] && ! check_idle; then
+    exit 3
+  fi
+
+  local issues=0
+
+  # Run checks
+  check_dotfiles || ((issues++)) || true
+  check_packages || ((issues++)) || true
+  run_sorter
+
+  # Flush any batched notifications
+  if [[ -x "${BIN_DIR}/domus-notify" ]]; then
+    "${BIN_DIR}/domus-notify" --flush 2>/dev/null || true
+  fi
+
+  # Record telemetry
+  local end_time
+  end_time=$(date +%s%3N 2>/dev/null || echo $(($(date +%s) * 1000)))
+  local duration=$((end_time - start_time))
+
+  local status="ok"
+  [[ $issues -gt 0 ]] && status="drift"
+
+  record_daemon_run "$duration" "$status"
+
+  # Check against performance budget
+  local warning_ms=15000
+  if command -v yq &>/dev/null && [[ -f "${MANIFEST}" ]]; then
+    warning_ms=$(yq -r '.performance.daemon_run.warning_ms // 15000' "${MANIFEST}")
+  fi
+
+  if [[ $duration -gt $warning_ms ]]; then
+    log "WARN" "Daemon run exceeded budget: ${duration}ms > ${warning_ms}ms"
+  fi
+
+  log "INFO" "Daemon complete in ${duration}ms (issues: ${issues})"
+
+  [[ $issues -eq 0 ]] && exit 0 || exit 1
+}
+
+main

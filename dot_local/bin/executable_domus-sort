@@ -1,0 +1,503 @@
+#!/usr/bin/env bash
+# ─────────────────────────────────────────────────────────────────────────────
+# domus-sort - Intelligent file sorter with FSEvents support
+# ─────────────────────────────────────────────────────────────────────────────
+#
+# Watches directories and applies sorting rules from manifest.
+#
+# Usage:
+#   domus-sort              # Run once
+#   domus-sort --watch      # Start FSEvents daemon
+#   domus-sort --dry-run    # Preview only
+#
+# Exit codes:
+#   0 - Success
+#   1 - Files moved
+#   2 - Error
+
+set -euo pipefail
+
+# ─────────────────────────────────────────────────────────────────────────────
+# Configuration
+# ─────────────────────────────────────────────────────────────────────────────
+
+CONFIG_DIR="${HOME}/.config/domus"
+STATE_DIR="${HOME}/.local/state/domus"
+MANIFEST="${CONFIG_DIR}/manifest.yaml"
+LOG_FILE="${STATE_DIR}/sort.log"
+BIN_DIR="${HOME}/.local/bin"
+
+DEBOUNCE_SECONDS=5
+MAX_LOG_SIZE=1048576  # 1MB
+
+# ─────────────────────────────────────────────────────────────────────────────
+# Colors
+# ─────────────────────────────────────────────────────────────────────────────
+
+if [[ -t 1 ]]; then
+  RED='\033[0;31m'
+  GREEN='\033[0;32m'
+  YELLOW='\033[0;33m'
+  BLUE='\033[0;34m'
+  CYAN='\033[0;36m'
+  DIM='\033[0;90m'
+  RESET='\033[0m'
+else
+  RED='' GREEN='' YELLOW='' BLUE='' CYAN='' DIM='' RESET=''
+fi
+
+# ─────────────────────────────────────────────────────────────────────────────
+# Helpers
+# ─────────────────────────────────────────────────────────────────────────────
+
+die() {
+  printf "${RED}error:${RESET} %s\n" "$1" >&2
+  exit 2
+}
+
+log() {
+  local level="$1"
+  shift
+  local timestamp
+  timestamp=$(date '+%Y-%m-%d %H:%M:%S')
+  echo "[${timestamp}] [${level}] $*" >> "${LOG_FILE}"
+
+  if [[ -t 1 ]]; then
+    case "$level" in
+      INFO) printf "${BLUE}::${RESET} %s\n" "$*" ;;
+      MOVE) printf "${GREEN}→${RESET} %s\n" "$*" ;;
+      SKIP) printf "${DIM}○${RESET} %s\n" "$*" ;;
+      WARN) printf "${YELLOW}!${RESET} %s\n" "$*" ;;
+      ERROR) printf "${RED}✗${RESET} %s\n" "$*" ;;
+    esac
+  fi
+}
+
+log_rotate() {
+  mkdir -p "${STATE_DIR}"
+  if [[ -f "${LOG_FILE}" ]]; then
+    local size
+    size=$(stat -f%z "${LOG_FILE}" 2>/dev/null || stat -c%s "${LOG_FILE}" 2>/dev/null || echo 0)
+    if [[ ${size} -gt ${MAX_LOG_SIZE} ]]; then
+      mv "${LOG_FILE}" "${LOG_FILE}.old"
+    fi
+  fi
+}
+
+check_deps() {
+  if ! command -v yq &>/dev/null; then
+    die "yq required for manifest parsing (brew install yq)"
+  fi
+}
+
+check_manifest() {
+  if [[ ! -f "${MANIFEST}" ]]; then
+    die "Manifest not found: ${MANIFEST}"
+  fi
+}
+
+expand_path() {
+  local path="$1"
+  # Expand ~ to $HOME
+  path="${path/#\~/$HOME}"
+  echo "$path"
+}
+
+# ─────────────────────────────────────────────────────────────────────────────
+# Smart Naming
+# ─────────────────────────────────────────────────────────────────────────────
+
+# Extract PDF title from metadata
+get_pdf_title() {
+  local file="$1"
+
+  if command -v pdfinfo &>/dev/null; then
+    local title
+    title=$(pdfinfo "$file" 2>/dev/null | grep -i '^Title:' | sed 's/^Title:[[:space:]]*//')
+    if [[ -n "$title" && "$title" != "Untitled" && ${#title} -gt 3 ]]; then
+      # Sanitize for filename
+      echo "$title" | tr '[:upper:]' '[:lower:]' | \
+        sed 's/[^a-z0-9 -]//g' | \
+        sed 's/  */ /g' | \
+        sed 's/ /-/g' | \
+        cut -c1-50
+      return
+    fi
+  fi
+
+  # Fallback to original name without extension
+  basename "$file" .pdf | tr '[:upper:]' '[:lower:]' | sed 's/[^a-z0-9-]/-/g'
+}
+
+# Extract EXIF date from image
+get_exif_date() {
+  local file="$1"
+
+  if command -v exiftool &>/dev/null; then
+    local date
+    date=$(exiftool -DateTimeOriginal -s3 "$file" 2>/dev/null)
+    if [[ -n "$date" ]]; then
+      echo "$date" | cut -d' ' -f1 | tr ':' '-'
+      return
+    fi
+  fi
+
+  # Fallback to file modification date
+  stat -f '%Sm' -t '%Y-%m-%d' "$file" 2>/dev/null || date +%Y-%m-%d
+}
+
+# ─────────────────────────────────────────────────────────────────────────────
+# Template Expansion
+# ─────────────────────────────────────────────────────────────────────────────
+
+expand_template() {
+  local template="$1"
+  local file="$2"
+
+  local year month day filename ext basename_noext smart_name
+
+  year=$(date +%Y)
+  month=$(date +%m)
+  day=$(date +%d)
+  filename=$(basename "$file")
+  ext="${filename##*.}"
+  basename_noext="${filename%.*}"
+
+  # Smart name based on file type
+  case "${ext,,}" in
+    pdf) smart_name=$(get_pdf_title "$file") ;;
+    *) smart_name="$basename_noext" ;;
+  esac
+
+  template="${template//\{year\}/$year}"
+  template="${template//\{month\}/$month}"
+  template="${template//\{day\}/$day}"
+  template="${template//\{filename\}/$filename}"
+  template="${template//\{ext\}/$ext}"
+  template="${template//\{basename\}/$basename_noext}"
+  template="${template//\{smart_name\}/$smart_name}"
+
+  expand_path "$template"
+}
+
+# ─────────────────────────────────────────────────────────────────────────────
+# Rule Matching
+# ─────────────────────────────────────────────────────────────────────────────
+
+# Helper to clean yq output (handles "null" -> "")
+yq_clean() {
+  local val
+  val=$(yq -r "$1" "$2" 2>/dev/null)
+  [[ "$val" == "null" ]] && echo "" || echo "$val"
+}
+
+# Check if file matches a rule
+file_matches_rule() {
+  local file="$1"
+  local rule_index="$2"
+
+  local filename dir ext age_days
+
+  filename=$(basename "$file")
+  dir=$(dirname "$file")
+  ext="${filename##*.}"
+  ext="${ext,,}"  # lowercase
+
+  # Get rule match criteria
+  local pattern=$(yq_clean ".sorting.rules[$rule_index].match.pattern" "${MANIFEST}")
+  local location=$(yq_clean ".sorting.rules[$rule_index].match.location" "${MANIFEST}")
+  local extensions=$(yq -r ".sorting.rules[$rule_index].match.extension[]" "${MANIFEST}" 2>/dev/null | tr '\n' '|' | sed 's/|$//')
+  local age_min=$(yq_clean ".sorting.rules[$rule_index].match.age_days_min" "${MANIFEST}")
+  local exclude_pattern=$(yq_clean ".sorting.rules[$rule_index].match.exclude_pattern" "${MANIFEST}")
+
+  # Check location match
+  if [[ -n "$location" ]]; then
+    location=$(expand_path "$location")
+    if [[ "$dir" != "$location" && "$dir" != "${location%/}" ]]; then
+      return 1
+    fi
+  fi
+
+  # Check pattern match
+  if [[ -n "$pattern" ]]; then
+    # Use bash pattern matching
+    if [[ ! "$filename" == $pattern ]]; then
+      return 1
+    fi
+  fi
+
+  # Check extension match
+  if [[ -n "$extensions" ]]; then
+    if ! echo "$ext" | command grep -qiE "^(${extensions})$"; then
+      return 1
+    fi
+  fi
+
+  # Check age
+  if [[ -n "$age_min" ]]; then
+    local file_age
+    local now=$(date +%s)
+    local file_mtime
+    file_mtime=$(stat -f '%m' "$file" 2>/dev/null || stat -c '%Y' "$file" 2>/dev/null)
+    file_age=$(( (now - file_mtime) / 86400 ))
+    if [[ $file_age -lt $age_min ]]; then
+      return 1
+    fi
+  fi
+
+  # Check exclude pattern
+  if [[ -n "$exclude_pattern" ]]; then
+    if [[ "$filename" =~ $exclude_pattern ]]; then
+      return 1
+    fi
+  fi
+
+  return 0
+}
+
+# Get action for a matching rule
+get_rule_action() {
+  local rule_index="$1"
+  local file="$2"
+
+  local move_to=$(yq_clean ".sorting.rules[$rule_index].action.move_to" "${MANIFEST}")
+  local rename=$(yq_clean ".sorting.rules[$rule_index].action.rename" "${MANIFEST}")
+
+  if [[ -z "$move_to" || "$move_to" == "null" ]]; then
+    echo ""
+    return
+  fi
+
+  local dest_dir
+  dest_dir=$(expand_template "$move_to" "$file")
+
+  local dest_name
+  if [[ -n "$rename" ]]; then
+    local ext="${file##*.}"
+    dest_name=$(expand_template "$rename" "$file")
+    dest_name="${dest_name}.${ext}"
+  else
+    dest_name=$(basename "$file")
+  fi
+
+  echo "${dest_dir}/${dest_name}"
+}
+
+# ─────────────────────────────────────────────────────────────────────────────
+# File Processing
+# ─────────────────────────────────────────────────────────────────────────────
+
+process_file() {
+  local file="$1"
+  local dry_run="${2:-0}"
+
+  # Skip if not a file
+  [[ ! -f "$file" ]] && return 0
+
+  # Skip hidden files and partial downloads
+  local filename
+  filename=$(basename "$file")
+  [[ "$filename" == .* ]] && return 0
+  [[ "$filename" == *.crdownload ]] && return 0
+  [[ "$filename" == *.part ]] && return 0
+  [[ "$filename" == *.download ]] && return 0
+
+  # Get number of rules
+  local num_rules
+  num_rules=$(yq -r '.sorting.rules | length' "${MANIFEST}")
+
+  # Try each rule
+  for ((i=0; i<num_rules; i++)); do
+    if file_matches_rule "$file" "$i"; then
+      local dest
+      dest=$(get_rule_action "$i" "$file")
+
+      if [[ -n "$dest" ]]; then
+        local rule_name
+        rule_name=$(yq_clean ".sorting.rules[$i].name" "${MANIFEST}")
+        [[ -z "$rule_name" ]] && rule_name="rule-$i"
+
+        if [[ $dry_run -eq 1 ]]; then
+          log "INFO" "[dry-run] ${filename} → ${dest} (rule: ${rule_name})"
+        else
+          # Create destination directory
+          local dest_dir
+          dest_dir=$(dirname "$dest")
+          mkdir -p "$dest_dir"
+
+          # Handle name collisions
+          if [[ -f "$dest" ]]; then
+            local base ext counter=1
+            base="${dest%.*}"
+            ext="${dest##*.}"
+            while [[ -f "${base}-${counter}.${ext}" ]]; do
+              ((counter++))
+            done
+            dest="${base}-${counter}.${ext}"
+          fi
+
+          # Move file
+          if mv "$file" "$dest" 2>/dev/null; then
+            log "MOVE" "${filename} → ${dest} (rule: ${rule_name})"
+
+            # Notify
+            if [[ -x "${BIN_DIR}/domus-notify" ]]; then
+              "${BIN_DIR}/domus-notify" --level quiet \
+                --event "sorting.file_moved" \
+                --message "Sorted: ${filename}" &
+            fi
+
+            return 1  # File was moved
+          else
+            log "ERROR" "Failed to move ${filename}"
+          fi
+        fi
+        return 0
+      fi
+    fi
+  done
+
+  return 0  # No rule matched
+}
+
+# ─────────────────────────────────────────────────────────────────────────────
+# Commands
+# ─────────────────────────────────────────────────────────────────────────────
+
+cmd_run_once() {
+  local dry_run="${1:-0}"
+
+  check_deps
+  check_manifest
+  log_rotate
+
+  log "INFO" "Starting sort run..."
+
+  # Get directories to watch
+  local directories
+  directories=$(yq -r '.sorting.directories[]' "${MANIFEST}")
+
+  if [[ -z "$directories" ]]; then
+    log "WARN" "No directories configured in manifest"
+    return 0
+  fi
+
+  local moved=0
+
+  while IFS= read -r dir; do
+    [[ -z "$dir" ]] && continue
+    dir=$(expand_path "$dir")
+
+    if [[ ! -d "$dir" ]]; then
+      log "WARN" "Directory not found: $dir"
+      continue
+    fi
+
+    log "INFO" "Processing: $dir"
+
+    # Process each file in directory (non-recursive for now)
+    while IFS= read -r -d '' file; do
+      if process_file "$file" "$dry_run"; then
+        :
+      else
+        ((moved++)) || true
+      fi
+    done < <(find "$dir" -maxdepth 1 -type f -print0 2>/dev/null)
+  done <<< "$directories"
+
+  log "INFO" "Sort complete: ${moved} files moved"
+
+  [[ $moved -gt 0 ]] && return 1 || return 0
+}
+
+cmd_watch() {
+  check_deps
+  check_manifest
+  log_rotate
+
+  # Check for fswatch
+  if ! command -v fswatch &>/dev/null; then
+    die "fswatch required for watch mode (brew install fswatch)"
+  fi
+
+  log "INFO" "Starting watch daemon..."
+
+  # Get directories
+  local directories
+  directories=$(yq -r '.sorting.directories[]' "${MANIFEST}")
+
+  if [[ -z "$directories" ]]; then
+    die "No directories configured in manifest"
+  fi
+
+  local watch_dirs=()
+  while IFS= read -r dir; do
+    [[ -z "$dir" ]] && continue
+    dir=$(expand_path "$dir")
+    if [[ -d "$dir" ]]; then
+      watch_dirs+=("$dir")
+      log "INFO" "Watching: $dir"
+    fi
+  done <<< "$directories"
+
+  if [[ ${#watch_dirs[@]} -eq 0 ]]; then
+    die "No valid directories to watch"
+  fi
+
+  # Track last event time for debouncing
+  local last_event=0
+
+  # Start fswatch
+  fswatch -0 --event Created --event MovedTo "${watch_dirs[@]}" | while IFS= read -r -d '' file; do
+    local now
+    now=$(date +%s)
+
+    # Debounce: skip if too soon after last event
+    if [[ $((now - last_event)) -lt $DEBOUNCE_SECONDS ]]; then
+      continue
+    fi
+    last_event=$now
+
+    # Small delay to let file finish writing
+    sleep 1
+
+    process_file "$file" 0
+  done
+}
+
+# ─────────────────────────────────────────────────────────────────────────────
+# Main
+# ─────────────────────────────────────────────────────────────────────────────
+
+main() {
+  mkdir -p "${STATE_DIR}"
+
+  local cmd=""
+  local dry_run=0
+
+  while [[ $# -gt 0 ]]; do
+    case "$1" in
+      --watch|-w) cmd="watch"; shift ;;
+      --dry-run|-n) dry_run=1; shift ;;
+      -h|--help)
+        cat <<EOF
+domus-sort - Intelligent file sorter
+
+Usage:
+  domus-sort              Run once
+  domus-sort --watch      Start FSEvents daemon
+  domus-sort --dry-run    Preview only
+EOF
+        exit 0
+        ;;
+      *) shift ;;
+    esac
+  done
+
+  case "$cmd" in
+    watch) cmd_watch ;;
+    *) cmd_run_once "$dry_run" ;;
+  esac
+}
+
+main "$@"

@@ -1,0 +1,501 @@
+#!/usr/bin/env bash
+# ─────────────────────────────────────────────────────────────────────────────
+# domus-packages - Package tracking and drift detection
+# ─────────────────────────────────────────────────────────────────────────────
+#
+# Tracks installed packages against manifest, reports drift, installs missing.
+#
+# Usage:
+#   domus-packages status [--quiet|--json]  # Show package status
+#   domus-packages diff [--json]            # Show drift details
+#   domus-packages apply [--dry-run]        # Install missing packages
+#   domus-packages snapshot                 # Dump current state
+#
+# Exit codes:
+#   0 - Success (no drift or drift fixed)
+#   1 - Drift detected
+#   2 - Error
+
+set -euo pipefail
+
+# ─────────────────────────────────────────────────────────────────────────────
+# Configuration
+# ─────────────────────────────────────────────────────────────────────────────
+
+CONFIG_DIR="${HOME}/.config/domus"
+STATE_DIR="${HOME}/.local/state/domus"
+MANIFEST="${CONFIG_DIR}/manifest.yaml"
+SNAPSHOT_DIR="${STATE_DIR}/snapshots"
+
+# ─────────────────────────────────────────────────────────────────────────────
+# Colors
+# ─────────────────────────────────────────────────────────────────────────────
+
+if [[ -t 1 ]]; then
+  RED='\033[0;31m'
+  GREEN='\033[0;32m'
+  YELLOW='\033[0;33m'
+  BLUE='\033[0;34m'
+  CYAN='\033[0;36m'
+  DIM='\033[0;90m'
+  BOLD='\033[1m'
+  RESET='\033[0m'
+else
+  RED='' GREEN='' YELLOW='' BLUE='' CYAN='' DIM='' BOLD='' RESET=''
+fi
+
+# ─────────────────────────────────────────────────────────────────────────────
+# Helpers
+# ─────────────────────────────────────────────────────────────────────────────
+
+die() {
+  printf "${RED}error:${RESET} %s\n" "$1" >&2
+  exit 2
+}
+
+info() {
+  printf "${BLUE}::${RESET} %s\n" "$1"
+}
+
+success() {
+  printf "${GREEN}✓${RESET} %s\n" "$1"
+}
+
+warn() {
+  printf "${YELLOW}!${RESET} %s\n" "$1"
+}
+
+check_manifest() {
+  if [[ ! -f "${MANIFEST}" ]]; then
+    die "Manifest not found: ${MANIFEST}"
+  fi
+}
+
+check_yq() {
+  if ! command -v yq &>/dev/null; then
+    die "yq required for manifest parsing (brew install yq)"
+  fi
+}
+
+# ─────────────────────────────────────────────────────────────────────────────
+# Package List Extraction
+# ─────────────────────────────────────────────────────────────────────────────
+
+# Get installed homebrew formulae
+get_installed_formulae() {
+  brew list --formula -1 2>/dev/null | sort
+}
+
+# Get installed homebrew casks
+get_installed_casks() {
+  brew list --cask -1 2>/dev/null | sort
+}
+
+# Get installed pipx packages
+get_installed_pipx() {
+  if command -v pipx &>/dev/null; then
+    pipx list --short 2>/dev/null | awk '{print $1}' | sort
+  fi
+}
+
+# Get installed npm global packages
+get_installed_npm() {
+  if command -v npm &>/dev/null; then
+    npm list -g --depth=0 --json 2>/dev/null | \
+      jq -r '.dependencies // {} | keys[]' 2>/dev/null | \
+      command grep -v '^npm$' | sort || true
+  fi
+}
+
+# Get installed cargo packages
+get_installed_cargo() {
+  if command -v cargo &>/dev/null; then
+    cargo install --list 2>/dev/null | command grep -v '^ ' | cut -d' ' -f1 | sort || true
+  fi
+}
+
+# ─────────────────────────────────────────────────────────────────────────────
+# Manifest Extraction
+# ─────────────────────────────────────────────────────────────────────────────
+
+get_manifest_formulae() {
+  yq -r '.packages.homebrew.formulae[]? ' "${MANIFEST}" 2>/dev/null | sort
+}
+
+get_manifest_casks() {
+  yq -r '.packages.homebrew.casks[]? ' "${MANIFEST}" 2>/dev/null | sort
+}
+
+get_manifest_pipx() {
+  yq -r '.packages.pipx[]? ' "${MANIFEST}" 2>/dev/null | sort
+}
+
+get_manifest_npm() {
+  yq -r '.packages.npm_global[]? ' "${MANIFEST}" 2>/dev/null | sort
+}
+
+get_manifest_cargo() {
+  yq -r '.packages.cargo[]? ' "${MANIFEST}" 2>/dev/null | sort
+}
+
+# ─────────────────────────────────────────────────────────────────────────────
+# Diff Functions
+# ─────────────────────────────────────────────────────────────────────────────
+
+# Returns: missing (in manifest but not installed)
+diff_missing() {
+  local manifest_list="$1"
+  local installed_list="$2"
+  comm -23 <(echo "$manifest_list") <(echo "$installed_list")
+}
+
+# Returns: extra (installed but not in manifest)
+diff_extra() {
+  local manifest_list="$1"
+  local installed_list="$2"
+  comm -13 <(echo "$manifest_list") <(echo "$installed_list")
+}
+
+# ─────────────────────────────────────────────────────────────────────────────
+# Commands
+# ─────────────────────────────────────────────────────────────────────────────
+
+cmd_status() {
+  local quiet_mode=0
+  local json_mode=0
+
+  while [[ $# -gt 0 ]]; do
+    case "$1" in
+      --quiet|-q) quiet_mode=1; shift ;;
+      --json) json_mode=1; shift ;;
+      *) shift ;;
+    esac
+  done
+
+  check_manifest
+  check_yq
+
+  local total_missing=0
+  local total_extra=0
+
+  # Check each package manager
+  local managers=("formulae" "casks" "pipx" "npm" "cargo")
+
+  for mgr in "${managers[@]}"; do
+    local manifest_list installed_list missing extra
+
+    case "$mgr" in
+      formulae) manifest_list=$(get_manifest_formulae); installed_list=$(get_installed_formulae) ;;
+      casks) manifest_list=$(get_manifest_casks); installed_list=$(get_installed_casks) ;;
+      pipx) manifest_list=$(get_manifest_pipx); installed_list=$(get_installed_pipx) ;;
+      npm) manifest_list=$(get_manifest_npm); installed_list=$(get_installed_npm) ;;
+      cargo) manifest_list=$(get_manifest_cargo); installed_list=$(get_installed_cargo) ;;
+    esac
+
+    if [[ -n "$manifest_list" ]]; then
+      missing=$(diff_missing "$manifest_list" "$installed_list" | wc -l | tr -d ' ')
+      extra=$(diff_extra "$manifest_list" "$installed_list" | wc -l | tr -d ' ')
+      total_missing=$((total_missing + missing))
+      total_extra=$((total_extra + extra))
+    fi
+  done
+
+  local status="synced"
+  [[ $total_missing -gt 0 || $total_extra -gt 0 ]] && status="drift"
+
+  if [[ $quiet_mode -eq 1 ]]; then
+    echo "$status"
+    [[ "$status" == "synced" ]] && return 0 || return 1
+  fi
+
+  if [[ $json_mode -eq 1 ]]; then
+    cat <<EOF
+{
+  "status": "${status}",
+  "missing": ${total_missing},
+  "extra": ${total_extra}
+}
+EOF
+    [[ "$status" == "synced" ]] && return 0 || return 1
+  fi
+
+  echo ""
+  printf "${BOLD}Package Status${RESET}\n"
+  echo ""
+
+  if [[ "$status" == "synced" ]]; then
+    success "All packages synced with manifest"
+  else
+    warn "Drift detected: ${total_missing} missing, ${total_extra} extra"
+    printf "  Run ${CYAN}domus packages diff${RESET} for details\n"
+  fi
+  echo ""
+
+  [[ "$status" == "synced" ]] && return 0 || return 1
+}
+
+cmd_diff() {
+  local json_mode=0
+
+  while [[ $# -gt 0 ]]; do
+    case "$1" in
+      --json) json_mode=1; shift ;;
+      *) shift ;;
+    esac
+  done
+
+  check_manifest
+  check_yq
+
+  local has_drift=0
+
+  if [[ $json_mode -eq 0 ]]; then
+    echo ""
+    printf "${BOLD}Package Drift Report${RESET}\n"
+    echo ""
+  fi
+
+  # Helper to print diff section
+  print_diff_section() {
+    local name="$1"
+    local manifest_list="$2"
+    local installed_list="$3"
+
+    [[ -z "$manifest_list" ]] && return
+
+    local missing=$(diff_missing "$manifest_list" "$installed_list")
+    local extra=$(diff_extra "$manifest_list" "$installed_list")
+
+    if [[ -n "$missing" || -n "$extra" ]]; then
+      has_drift=1
+      if [[ $json_mode -eq 0 ]]; then
+        printf "${CYAN}[${name}]${RESET}\n"
+        if [[ -n "$missing" ]]; then
+          echo "$missing" | while read -r pkg; do
+            [[ -n "$pkg" ]] && printf "  ${RED}− ${pkg}${RESET} (missing)\n"
+          done
+        fi
+        if [[ -n "$extra" ]]; then
+          echo "$extra" | while read -r pkg; do
+            [[ -n "$pkg" ]] && printf "  ${DIM}+ ${pkg}${RESET} (extra)\n"
+          done
+        fi
+        echo ""
+      fi
+    fi
+  }
+
+  # Check each manager
+  print_diff_section "homebrew:formulae" "$(get_manifest_formulae)" "$(get_installed_formulae)"
+  print_diff_section "homebrew:casks" "$(get_manifest_casks)" "$(get_installed_casks)"
+  print_diff_section "pipx" "$(get_manifest_pipx)" "$(get_installed_pipx)"
+  print_diff_section "npm:global" "$(get_manifest_npm)" "$(get_installed_npm)"
+  print_diff_section "cargo" "$(get_manifest_cargo)" "$(get_installed_cargo)"
+
+  if [[ $json_mode -eq 1 ]]; then
+    # Build JSON output
+    local json_output='{"drift": {'
+
+    # Formulae
+    local m=$(diff_missing "$(get_manifest_formulae)" "$(get_installed_formulae)" | jq -R . | jq -s .)
+    local e=$(diff_extra "$(get_manifest_formulae)" "$(get_installed_formulae)" | jq -R . | jq -s .)
+    json_output+='"formulae": {"missing": '"$m"', "extra": '"$e"'},'
+
+    # Casks
+    m=$(diff_missing "$(get_manifest_casks)" "$(get_installed_casks)" | jq -R . | jq -s .)
+    e=$(diff_extra "$(get_manifest_casks)" "$(get_installed_casks)" | jq -R . | jq -s .)
+    json_output+='"casks": {"missing": '"$m"', "extra": '"$e"'},'
+
+    # pipx
+    m=$(diff_missing "$(get_manifest_pipx)" "$(get_installed_pipx)" | jq -R . | jq -s .)
+    e=$(diff_extra "$(get_manifest_pipx)" "$(get_installed_pipx)" | jq -R . | jq -s .)
+    json_output+='"pipx": {"missing": '"$m"', "extra": '"$e"'},'
+
+    # npm
+    m=$(diff_missing "$(get_manifest_npm)" "$(get_installed_npm)" | jq -R . | jq -s .)
+    e=$(diff_extra "$(get_manifest_npm)" "$(get_installed_npm)" | jq -R . | jq -s .)
+    json_output+='"npm_global": {"missing": '"$m"', "extra": '"$e"'},'
+
+    # cargo
+    m=$(diff_missing "$(get_manifest_cargo)" "$(get_installed_cargo)" | jq -R . | jq -s .)
+    e=$(diff_extra "$(get_manifest_cargo)" "$(get_installed_cargo)" | jq -R . | jq -s .)
+    json_output+='"cargo": {"missing": '"$m"', "extra": '"$e"'}'
+
+    json_output+='}}'
+    echo "$json_output" | jq .
+  elif [[ $has_drift -eq 0 ]]; then
+    success "No drift detected"
+    echo ""
+  fi
+
+  [[ $has_drift -eq 0 ]] && return 0 || return 1
+}
+
+cmd_apply() {
+  local dry_run=0
+
+  while [[ $# -gt 0 ]]; do
+    case "$1" in
+      --dry-run|-n) dry_run=1; shift ;;
+      *) shift ;;
+    esac
+  done
+
+  check_manifest
+  check_yq
+
+  local exit_code=0
+
+  # Install missing homebrew formulae
+  local missing_formulae=$(diff_missing "$(get_manifest_formulae)" "$(get_installed_formulae)")
+  if [[ -n "$missing_formulae" ]]; then
+    echo "$missing_formulae" | while read -r pkg; do
+      [[ -z "$pkg" ]] && continue
+      if [[ $dry_run -eq 1 ]]; then
+        info "[dry-run] Would install formula: $pkg"
+      else
+        info "Installing formula: $pkg"
+        brew install "$pkg" || { warn "Failed to install $pkg"; exit_code=1; }
+      fi
+    done
+  fi
+
+  # Install missing homebrew casks
+  local missing_casks=$(diff_missing "$(get_manifest_casks)" "$(get_installed_casks)")
+  if [[ -n "$missing_casks" ]]; then
+    echo "$missing_casks" | while read -r pkg; do
+      [[ -z "$pkg" ]] && continue
+      if [[ $dry_run -eq 1 ]]; then
+        info "[dry-run] Would install cask: $pkg"
+      else
+        info "Installing cask: $pkg"
+        brew install --cask "$pkg" || { warn "Failed to install $pkg"; exit_code=1; }
+      fi
+    done
+  fi
+
+  # Install missing pipx packages
+  local missing_pipx=$(diff_missing "$(get_manifest_pipx)" "$(get_installed_pipx)")
+  if [[ -n "$missing_pipx" ]] && command -v pipx &>/dev/null; then
+    echo "$missing_pipx" | while read -r pkg; do
+      [[ -z "$pkg" ]] && continue
+      if [[ $dry_run -eq 1 ]]; then
+        info "[dry-run] Would install pipx: $pkg"
+      else
+        info "Installing pipx: $pkg"
+        pipx install "$pkg" || { warn "Failed to install $pkg"; exit_code=1; }
+      fi
+    done
+  fi
+
+  # Install missing npm global packages
+  local missing_npm=$(diff_missing "$(get_manifest_npm)" "$(get_installed_npm)")
+  if [[ -n "$missing_npm" ]] && command -v npm &>/dev/null; then
+    echo "$missing_npm" | while read -r pkg; do
+      [[ -z "$pkg" ]] && continue
+      if [[ $dry_run -eq 1 ]]; then
+        info "[dry-run] Would install npm: $pkg"
+      else
+        info "Installing npm: $pkg"
+        npm install -g "$pkg" || { warn "Failed to install $pkg"; exit_code=1; }
+      fi
+    done
+  fi
+
+  # Install missing cargo packages
+  local missing_cargo=$(diff_missing "$(get_manifest_cargo)" "$(get_installed_cargo)")
+  if [[ -n "$missing_cargo" ]] && command -v cargo &>/dev/null; then
+    echo "$missing_cargo" | while read -r pkg; do
+      [[ -z "$pkg" ]] && continue
+      if [[ $dry_run -eq 1 ]]; then
+        info "[dry-run] Would install cargo: $pkg"
+      else
+        info "Installing cargo: $pkg"
+        cargo install "$pkg" || { warn "Failed to install $pkg"; exit_code=1; }
+      fi
+    done
+  fi
+
+  if [[ $dry_run -eq 0 ]]; then
+    if [[ $exit_code -eq 0 ]]; then
+      success "All packages synced"
+    else
+      warn "Some packages failed to install"
+    fi
+  fi
+
+  return $exit_code
+}
+
+cmd_snapshot() {
+  mkdir -p "${SNAPSHOT_DIR}"
+
+  local timestamp
+  timestamp=$(date +%Y%m%d-%H%M%S)
+  local snapshot="${SNAPSHOT_DIR}/snapshot-${timestamp}.json"
+
+  info "Creating package snapshot..."
+
+  local formulae=$(get_installed_formulae | jq -R . | jq -s .)
+  local casks=$(get_installed_casks | jq -R . | jq -s .)
+  local pipx=$(get_installed_pipx | jq -R . | jq -s .)
+  local npm=$(get_installed_npm | jq -R . | jq -s .)
+  local cargo=$(get_installed_cargo | jq -R . | jq -s .)
+
+  cat <<EOF > "$snapshot"
+{
+  "timestamp": "$(date -u +"%Y-%m-%dT%H:%M:%SZ")",
+  "packages": {
+    "homebrew": {
+      "formulae": ${formulae},
+      "casks": ${casks}
+    },
+    "pipx": ${pipx},
+    "npm_global": ${npm},
+    "cargo": ${cargo}
+  }
+}
+EOF
+
+  success "Snapshot saved: $snapshot"
+}
+
+# ─────────────────────────────────────────────────────────────────────────────
+# Main
+# ─────────────────────────────────────────────────────────────────────────────
+
+main() {
+  local cmd="${1:-status}"
+  shift 2>/dev/null || true
+
+  case "$cmd" in
+    status)
+      cmd_status "$@"
+      ;;
+    diff)
+      cmd_diff "$@"
+      ;;
+    apply)
+      cmd_apply "$@"
+      ;;
+    snapshot)
+      cmd_snapshot "$@"
+      ;;
+    -h|--help)
+      cat <<EOF
+domus-packages - Package tracking and drift detection
+
+Usage:
+  domus-packages status [--quiet|--json]  Status check
+  domus-packages diff [--json]            Show drift details
+  domus-packages apply [--dry-run]        Install missing
+  domus-packages snapshot                 Dump current state
+EOF
+      ;;
+    *)
+      die "Unknown command: $cmd"
+      ;;
+  esac
+}
+
+main "$@"
