@@ -1,0 +1,19 @@
+#!/bin/bash
+# sync-skills.sh hash: {{ include "dot_config/ai-skills/.keep" | sha256sum }}
+set -euo pipefail
+
+SKILLS_DIR="${HOME}/.local/share/ai-skills"
+SKILLS_REPO="https://github.com/ivviiviivvi/skills.git"
+
+echo "Syncing AI skills..."
+
+if [[ -d "$SKILLS_DIR/.git" ]]; then
+    cd "$SKILLS_DIR"
+    git fetch origin
+    git reset --hard origin/main 2>/dev/null || git reset --hard origin/master
+    echo "Skills updated from GitHub"
+else
+    mkdir -p "$(dirname "$SKILLS_DIR")"
+    git clone "$SKILLS_REPO" "$SKILLS_DIR"
+    echo "Skills cloned from GitHub"
+fi

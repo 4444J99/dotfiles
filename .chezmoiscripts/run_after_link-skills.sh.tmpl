@@ -1,0 +1,25 @@
+#!/bin/bash
+set -euo pipefail
+
+SKILLS_SOURCE="${HOME}/.local/share/ai-skills"
+CLAUDE_SKILLS_PLUGIN="${HOME}/Library/Application Support/Claude/local-agent-mode-sessions/skills-plugin"
+
+if [[ ! -d "$SKILLS_SOURCE" ]]; then
+    echo "Skills not synced yet, skipping link"
+    exit 0
+fi
+
+# Find existing skills directory (UUID paths are dynamic)
+SKILLS_TARGET=$(find "$CLAUDE_SKILLS_PLUGIN" -type d -name "skills" 2>/dev/null | head -1)
+
+if [[ -n "$SKILLS_TARGET" ]]; then
+    # Backup if not already a symlink
+    if [[ ! -L "$SKILLS_TARGET" ]]; then
+        mv "$SKILLS_TARGET" "${SKILLS_TARGET}.backup.$(date +%s)"
+        echo "Backed up existing skills directory"
+    fi
+    ln -sfn "$SKILLS_SOURCE" "$SKILLS_TARGET"
+    echo "Linked: $SKILLS_TARGET -> $SKILLS_SOURCE"
+else
+    echo "Claude Desktop skills directory not found (will link on next run)"
+fi
