@@ -97,6 +97,7 @@ packages:
   pipx:
     - pywal
     - pplx-cli
+    - jupyter-mcp-server
 
   npm_global:
     - pnpm

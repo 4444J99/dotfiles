@@ -7,6 +7,19 @@
         "gateway",
         "run"
       ]
+    },
+    "context7": {
+      "url": "https://mcp.context7.com/mcp"
+    },
+    "github": {
+      "url": "https://api.githubcopilot.com/mcp/",
+      "headers": {
+        "Authorization": "Bearer {{ onepasswordRead "op://Personal/master-org-token-110525/token" }}"
+      }
+    },
+    "jupyter": {
+      "command": "jupyter-mcp-server",
+      "args": []
     }
   },
   "isHardwareAccelerationDisabled": false,
