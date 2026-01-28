@@ -1,0 +1,48 @@
+#!/bin/bash
+# Report missing Claude Desktop extensions
+
+set -euo pipefail
+
+EXPECTED_EXTENSIONS=(
+  "ant.dir.ant.anthropic.filesystem"
+  "ant.dir.ant.anthropic.imessage"
+  "ant.dir.ant.anthropic.notes"
+  "ant.dir.ant.anthropic.chrome-control"
+  "ant.dir.ant.anthropic.ms_office_word"
+  "ant.dir.ant.anthropic.ms_office_excel"
+  "ant.dir.ant.anthropic.ms_office_powerpoint"
+  "ant.dir.ant.figma.figma"
+  "ant.dir.domdomegg.airtable-mcp-server"
+  "ant.dir.gh.flux159.mcp-server-kubernetes"
+  "ant.dir.gh.k6l3.osascript"
+  "ant.dir.gh.k6l3.spotify"
+  "ant.dir.gh.silverstein.pdf-filler-simple"
+  "ant.dir.gh.socketdev.socket-mcp"
+  "ant.dir.gh.tooluniverse.tooluniverse-mcp"
+  "ant.dir.gh.wonderwhy-er.desktopcommandermcp"
+  "context7"
+)
+
+SETTINGS_DIR="$HOME/Library/Application Support/Claude/Claude Extensions Settings"
+
+# Only run if Claude Desktop is installed
+if [[ ! -d "$SETTINGS_DIR" ]]; then
+  exit 0
+fi
+
+missing=0
+
+for ext in "${EXPECTED_EXTENSIONS[@]}"; do
+  if [[ ! -f "$SETTINGS_DIR/${ext}.json" ]]; then
+    if [[ $missing -eq 0 ]]; then
+      echo "Claude Desktop extensions missing:"
+    fi
+    echo "  - $ext"
+    ((missing++)) || true
+  fi
+done
+
+if [[ $missing -gt 0 ]]; then
+  echo ""
+  echo "$missing extensions missing. Install from Claude Desktop's extension registry."
+fi

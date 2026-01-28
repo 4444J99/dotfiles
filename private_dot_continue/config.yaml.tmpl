@@ -15,3 +15,6 @@ mcpServers:
       GITHUB_PERSONAL_ACCESS_TOKEN: "{{ onepasswordRead "op://Personal/master-org-token-110525/token" }}"
   - name: jupyter
     command: jupyter-mcp-server
+  - name: serena
+    command: uvx
+    args: ["--from", "git+https://github.com/4444J99/serena", "serena", "start-mcp-server", "--context", "ide"]

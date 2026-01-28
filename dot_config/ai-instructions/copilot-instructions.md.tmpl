@@ -1,0 +1,15 @@
+# GitHub Copilot Instructions
+
+This file configures GitHub Copilot's behavior for this repository.
+Place at `.github/copilot-instructions.md` in your project.
+
+{{- $systemInfo := include "dot_config/ai-context/system-info.md.tmpl" }}
+{{- $codeStyle := include "dot_config/ai-context/code-style.md.tmpl" }}
+{{ $systemInfo }}
+{{ $codeStyle }}
+## Security
+
+- Never commit secrets or credentials
+- Validate and sanitize all inputs
+- Use parameterized queries for databases
+- Follow principle of least privilege

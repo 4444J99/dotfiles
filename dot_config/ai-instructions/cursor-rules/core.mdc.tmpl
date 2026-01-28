@@ -1,0 +1,14 @@
+---
+description: Core coding conventions and principles
+globs: ["**/*"]
+alwaysApply: true
+---
+
+# Core Conventions
+{{- $codeStyle := include "dot_config/ai-context/code-style.md.tmpl" }}
+{{ $codeStyle }}
+## Performance
+
+- Optimize only when necessary
+- Profile before optimizing
+- Prefer readability over micro-optimizations

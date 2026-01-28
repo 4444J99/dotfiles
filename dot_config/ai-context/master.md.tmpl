@@ -1,0 +1,26 @@
+# Master AI Instructions
+
+This directory contains the single source of truth for AI tool instructions.
+
+## Files
+
+- `system-info.md.tmpl` - System context (OS, shell, environment)
+- `code-style.md.tmpl` - Code style preferences and conventions
+
+## Usage
+
+Include these files in tool-specific configs:
+
+```
+{{- $systemInfo := include "dot_config/ai-context/system-info.md.tmpl" }}
+{{- $codeStyle := include "dot_config/ai-context/code-style.md.tmpl" }}
+{{ $systemInfo }}
+{{ $codeStyle }}
+```
+
+## Tools Using These Configs
+
+- Claude Code: `~/.claude/CLAUDE.md`
+- Gemini CLI: `~/.gemini/GEMINI.md`
+- GitHub Copilot: `~/.config/ai-instructions/copilot-instructions.md`
+- Cursor: `~/.config/ai-instructions/cursor-rules/core.mdc`

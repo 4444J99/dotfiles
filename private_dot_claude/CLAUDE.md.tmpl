@@ -1,0 +1,13 @@
+# Claude Code Instructions
+
+{{- $systemInfo := include "dot_config/ai-context/system-info.md.tmpl" }}
+{{- $codeStyle := include "dot_config/ai-context/code-style.md.tmpl" }}
+{{ $systemInfo }}
+{{ $codeStyle }}
+## Claude-Specific
+
+### Important Paths
+
+- **Claude Plans Directory**: `/Users/4jp/.claude/plans/`
+  - All implementation plans should be written here
+  - Agents should reference this location for plan files
