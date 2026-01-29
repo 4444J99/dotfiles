@@ -9,10 +9,15 @@ if [[ ! -d "$SKILLS_SOURCE" ]]; then
     exit 0
 fi
 
-# Find existing skills directory (UUID paths are dynamic)
-SKILLS_TARGET=$(find "$CLAUDE_SKILLS_PLUGIN" -type d -name "skills" 2>/dev/null | head -1)
+# Find skills directory or symlink (exclude backups)
+SKILLS_TARGET=$(find "$CLAUDE_SKILLS_PLUGIN" -name "skills" ! -name "*.backup*" 2>/dev/null | head -1)
 
 if [[ -n "$SKILLS_TARGET" ]]; then
+    # Already correctly linked - silent success
+    if [[ -L "$SKILLS_TARGET" && "$(readlink "$SKILLS_TARGET")" == "$SKILLS_SOURCE" ]]; then
+        exit 0
+    fi
+
     # Backup if not already a symlink
     if [[ ! -L "$SKILLS_TARGET" ]]; then
         mv "$SKILLS_TARGET" "${SKILLS_TARGET}.backup.$(date +%s)"
