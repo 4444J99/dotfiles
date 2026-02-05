@@ -35,8 +35,6 @@ export PATH="/opt/homebrew/opt/ruby/bin:/opt/homebrew/lib/ruby/gems/3.4.0/bin:$P
 export LDFLAGS="-L/opt/homebrew/opt/ruby/lib"
 export CPPFLAGS="-I/opt/homebrew/opt/ruby/include"
 export PKG_CONFIG_PATH="/opt/homebrew/opt/ruby/lib/pkgconfig"
-# Python (Homebrew - unversioned commands)
-export PATH="/opt/homebrew/opt/python@3.11/libexec/bin:$PATH"
 
 # Go
 export GOPATH=$HOME/go
@@ -145,6 +143,9 @@ fi
 if command -v mise &>/dev/null; then
   eval "$(mise activate zsh)"
 fi
+
+# Python (Homebrew - unversioned commands) - must be after mise
+export PATH="/opt/homebrew/opt/python@3.11/libexec/bin:$PATH"
 
 # ─────────────────────────────────────────────────────────────────────────────
 # NVM (Node Version Manager) - Lazy Load
