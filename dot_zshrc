@@ -169,10 +169,9 @@ fi
 # Color Theme Tools
 # ─────────────────────────────────────────────────────────────────────────────
 
-# pywal - restore colors on shell startup
-if command -v wal &>/dev/null && [[ -f "$HOME/.cache/wal/sequences" ]]; then
-  cat ~/.cache/wal/sequences
-  [[ -f "$HOME/.cache/wal/colors.sh" ]] && source "$HOME/.cache/wal/colors.sh"
+# pywal - load color variables (sequences not used on macOS)
+if command -v wal &>/dev/null && [[ -f "$HOME/.cache/wal/colors.sh" ]]; then
+  source "$HOME/.cache/wal/colors.sh"
 fi
 
 # lolcat aliases
