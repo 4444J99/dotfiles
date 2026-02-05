@@ -1,0 +1,13 @@
+# Mock chezmoi config for template testing
+# Provides sentinel values so templates can render without 1Password
+
+[data]
+name = "Test User"
+email = "test@example.com"
+is_work = false
+has_aws_credentials = false
+
+[data.chezmoi]
+sourceDir = "/tmp/chezmoi-test"
+os = "darwin"
+arch = "arm64"

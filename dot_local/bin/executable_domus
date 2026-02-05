@@ -145,6 +145,8 @@ ${BOLD}COMMANDS${RESET}
     ${CYAN}health${RESET}              Chezmoi health check
         --json          Machine-readable output
 
+    ${CYAN}doctor${RESET}              Comprehensive system diagnostics
+
 ${BOLD}OPTIONS${RESET}
     -h, --help          Show this help
     -v, --version       Show version
@@ -543,6 +545,130 @@ cmd_health() {
   fi
 }
 
+cmd_doctor() {
+  local exit_code=0
+
+  echo ""
+  printf "${BOLD}Domus Doctor${RESET} ${DIM}$(date '+%Y-%m-%d %H:%M')${RESET}\n"
+  echo ""
+
+  # 1. Shell startup time trend
+  printf "${CYAN}[startup]${RESET}  "
+  local telemetry="${STATE_DIR}/telemetry/shell-startup.jsonl"
+  if [[ -f "$telemetry" ]]; then
+    local avg_ms
+    avg_ms=$(tail -10 "$telemetry" | grep -o '"ms":[0-9]*' | grep -o '[0-9]*' | awk '{s+=$1; n++} END {if(n>0) print int(s/n); else print 0}')
+    if [[ $avg_ms -le 200 ]]; then
+      printf "${GREEN}✓${RESET} avg ${avg_ms}ms (last 10)\n"
+    elif [[ $avg_ms -le 500 ]]; then
+      printf "${YELLOW}!${RESET} avg ${avg_ms}ms (last 10) - above 200ms target\n"
+    else
+      printf "${RED}✗${RESET} avg ${avg_ms}ms (last 10) - above 500ms warning\n"
+      exit_code=1
+    fi
+  else
+    printf "${DIM}○${RESET} no telemetry data\n"
+  fi
+
+  # 2. Package drift
+  printf "${CYAN}[packages]${RESET} "
+  if [[ -x "${BIN_DIR}/domus-packages" ]]; then
+    local pkg_status
+    pkg_status=$("${BIN_DIR}/domus-packages" status --quiet 2>/dev/null || echo "unknown")
+    case "$pkg_status" in
+      synced) printf "${GREEN}✓${RESET} in sync with manifest\n" ;;
+      drift) printf "${YELLOW}!${RESET} drift detected\n"; exit_code=1 ;;
+      *) printf "${DIM}○${RESET} unable to check\n" ;;
+    esac
+  else
+    printf "${DIM}○${RESET} domus-packages not available\n"
+  fi
+
+  # 3. LaunchAgent status
+  printf "${CYAN}[daemons]${RESET}  "
+  if [[ "$(uname)" == "Darwin" ]]; then
+    local agents_ok=0
+    local agents_missing=0
+    for label in com.chezmoi.self-heal com.domus.daemon com.domus.sort; do
+      if launchctl list "$label" &>/dev/null; then
+        agents_ok=$((agents_ok + 1))
+      else
+        agents_missing=$((agents_missing + 1))
+      fi
+    done
+    if [[ $agents_missing -eq 0 ]]; then
+      printf "${GREEN}✓${RESET} ${agents_ok}/3 agents loaded\n"
+    else
+      printf "${YELLOW}!${RESET} ${agents_ok}/3 agents loaded (${agents_missing} missing)\n"
+      exit_code=1
+    fi
+  else
+    printf "${DIM}○${RESET} not macOS\n"
+  fi
+
+  # 4. Disk space
+  printf "${CYAN}[disk]${RESET}     "
+  local disk_pct
+  disk_pct=$(df -h / | awk 'NR==2 {gsub(/%/,"",$5); print $5}')
+  if [[ $disk_pct -lt 80 ]]; then
+    printf "${GREEN}✓${RESET} ${disk_pct}%% used\n"
+  elif [[ $disk_pct -lt 90 ]]; then
+    printf "${YELLOW}!${RESET} ${disk_pct}%% used\n"
+  else
+    printf "${RED}✗${RESET} ${disk_pct}%% used - disk nearly full\n"
+    exit_code=1
+  fi
+
+  # 5. 1Password CLI
+  printf "${CYAN}[1password]${RESET}"
+  if command -v op &>/dev/null; then
+    if op whoami &>/dev/null 2>&1; then
+      printf " ${GREEN}✓${RESET} authenticated\n"
+    else
+      printf " ${YELLOW}!${RESET} installed but not signed in\n"
+    fi
+  else
+    printf " ${DIM}○${RESET} not installed\n"
+  fi
+
+  # 6. Chezmoi health (quick check)
+  printf "${CYAN}[chezmoi]${RESET}  "
+  if command -v chezmoi &>/dev/null; then
+    local drift
+    drift=$(chezmoi diff 2>/dev/null | head -1) || drift=""
+    if [[ -z "$drift" ]]; then
+      printf "${GREEN}✓${RESET} no drift\n"
+    else
+      printf "${YELLOW}!${RESET} drift detected\n"
+      exit_code=1
+    fi
+  else
+    printf "${RED}✗${RESET} chezmoi not found\n"
+    exit_code=1
+  fi
+
+  # 7. Telemetry integrity
+  printf "${CYAN}[telemetry]${RESET}"
+  local telem_dir="${STATE_DIR}/telemetry"
+  if [[ -d "$telem_dir" ]]; then
+    local telem_files
+    telem_files=$(ls "$telem_dir"/*.jsonl 2>/dev/null | wc -l | tr -d ' ')
+    printf " ${GREEN}✓${RESET} ${telem_files} data file(s)\n"
+  else
+    printf " ${DIM}○${RESET} no telemetry directory\n"
+  fi
+
+  echo ""
+  if [[ $exit_code -eq 0 ]]; then
+    printf "${GREEN}${BOLD}All systems healthy${RESET}\n"
+  else
+    printf "${YELLOW}${BOLD}Issues detected${RESET} - review items above\n"
+  fi
+  echo ""
+
+  return $exit_code
+}
+
 # ─────────────────────────────────────────────────────────────────────────────
 # Main
 # ─────────────────────────────────────────────────────────────────────────────
@@ -575,6 +701,9 @@ main() {
       ;;
     health)
       cmd_health "$@"
+      ;;
+    doctor|doc)
+      cmd_doctor "$@"
       ;;
     *)
       die "Unknown command: $cmd (try 'domus --help')"

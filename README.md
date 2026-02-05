@@ -56,7 +56,7 @@ The repository contains zero secrets. 1Password CLI handles authentication.
 Runs every 4 hours via launchd:
 
 - Pulls latest changes from Git
-- Detects configuration drift  
+- Detects configuration drift
 - Creates timestamped backups before any repair
 - Sends macOS notifications when intervention is needed
 
@@ -64,6 +64,19 @@ Runs every 4 hours via launchd:
 cmh              # Check system health
 cmr list         # View available backups
 cmr restore <n>  # Restore from backup
+```
+
+### Domus CLI
+
+Unified management interface for the entire system:
+
+```bash
+domus status            # System overview
+domus apply --dry-run   # Preview sync
+domus packages diff     # Package drift report
+domus perf shell        # Shell startup trends
+domus health            # Health check
+domus doctor            # Comprehensive diagnostics
 ```
 
 ### Tokyo Night Terminal
@@ -80,45 +93,68 @@ All terminal tools share a unified color palette (`#1a1b26` background, `#7aa2f7
 ## Usage
 
 ```bash
+# Chezmoi shortcuts
 cma     # Apply changes
 cmd     # Preview diff
 cme     # Edit file
 cmu     # Update from remote
 cmh     # Health check
 cmr     # Recovery tool
+
+# Domus
+dm      # Status summary
+dma     # Apply all (dotfiles + packages)
+dmp     # Package status
+
+# Tools
 lg      # Launch lazygit
+j       # just (task runner)
 ```
 
 ## Structure
 
 ```
 ~/.local/share/chezmoi/
-├── .chezmoiscripts/        # Package install, daemon setup
+├── .chezmoiscripts/        # Package install, daemon setup, macOS defaults
 ├── dot_config/
+│   ├── domus/              # Manifest, daemon config
+│   ├── zsh/                # Modular shell config (9 modules)
 │   ├── kitty/              # Terminal config
 │   ├── tmux/               # Multiplexer + TPM
+│   ├── nvim/               # Neovim config
 │   ├── lazygit/            # Git TUI
 │   ├── bat/                # Cat replacement
-│   ├── git/                # Git + delta pager
-│   └── starship.toml       # Prompt
-├── dot_zshrc.tmpl          # Shell configuration
+│   ├── git/                # Git + delta + hooks
+│   ├── fish/               # Fish shell config
+│   ├── ai-context/         # AI assistant context
+│   ├── ai-instructions/    # Cursor/Copilot rules
+│   ├── starship.toml       # Prompt
+│   └── environment.tmpl    # XDG variables
+├── dot_local/bin/           # domus CLI, daemons, health, packages, theme
+├── dot_zshrc               # Shell entry point (loads zsh/ modules)
 ├── private_dot_ssh/        # SSH via 1Password agent
-└── private_Library/        # macOS LaunchAgent
+├── private_dot_claude/     # Claude Code config
+└── private_Library/        # macOS LaunchAgents (3 daemons)
 ```
 
 ## Documentation
 
 | Guide | Purpose |
 |-------|---------|
+| [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) | System architecture and diagrams |
+| [docs/DOMUS_CLI.md](docs/DOMUS_CLI.md) | Domus CLI reference |
+| [docs/DAEMONS.md](docs/DAEMONS.md) | Daemon system and notifications |
+| [docs/DEVELOPMENT.md](docs/DEVELOPMENT.md) | How to add modules, packages, and agents |
 | [1PASSWORD_SETUP.md](1PASSWORD_SETUP.md) | Configure secret management |
-| [EXTERNAL_DRIVE.md](EXTERNAL_DRIVE.md) | External drive integration |
-| [ORGANIZATION_STRATEGY.md](ORGANIZATION_STRATEGY.md) | File organization system |
+| [BACKUP_STRATEGY.md](BACKUP_STRATEGY.md) | Backup and recovery procedures |
+| [docs/EXTERNAL_DRIVE.md](docs/EXTERNAL_DRIVE.md) | External drive integration |
+| [docs/ORGANIZATION_STRATEGY.md](docs/ORGANIZATION_STRATEGY.md) | File organization system |
 
 ---
 
 <div align="center">
 
-**50+ managed files · 15 templates · 0 secrets in Git**
+**200+ managed files · 35 templates · 0 secrets in Git**
 
 MIT · [chezmoi](https://chezmoi.io) · [Tokyo Night](https://github.com/folke/tokyonight.nvim)
 

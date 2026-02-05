@@ -34,12 +34,22 @@ work_scripts/
 # Documentation files in config dirs (don't apply to home directory)
 .config/zsh/completions/README.md
 
+# Repository files (don't apply to home directory)
+.gitignore
+.github/
+.shellcheckrc
+.yamllint.yml
+.pre-commit-config.yaml
+.gitleaks.toml
+justfile
+tests/
+
 # Repository documentation (don't apply to home directory)
 README.md
+BOOTSTRAP.md
+BACKUP_STRATEGY.md
+docs/
 .claude/README.md
 1PASSWORD_SETUP.md
-ORGANIZATION_STRATEGY.md
-ORGANIZATION_QUICKSTART.md
-EXTERNAL_DRIVE.md
 PLUGINS.md
 DOTFILES_CLEANUP.md

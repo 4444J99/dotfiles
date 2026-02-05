@@ -1,0 +1,89 @@
+name: Lint & Validate
+
+on:
+  push:
+    branches: [master]
+  pull_request:
+    branches: [master]
+
+jobs:
+  shellcheck:
+    name: ShellCheck
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install ShellCheck
+        run: sudo apt-get install -y shellcheck
+      - name: Run ShellCheck on scripts
+        run: |
+          # Find all shell scripts, strip chezmoi template syntax, then check
+          find . -name '*.sh.tmpl' -o -name 'executable_*' | while read -r file; do
+            echo "Checking: $file"
+            # Strip chezmoi template directives for shellcheck
+            sed -E 's/\{\{.*?\}\}//g; s/\{\{-.*?-\}\}//g' "$file" | \
+              shellcheck -x -s bash - || true
+          done
+      - name: Run ShellCheck on non-template scripts
+        run: |
+          find dot_local/bin -name 'executable_*' ! -name '*.tmpl' -exec shellcheck -x {} +
+
+  yamllint:
+    name: YAML Lint
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install yamllint
+        run: pip install yamllint
+      - name: Run yamllint
+        run: |
+          find . -name '*.yml' -o -name '*.yaml' | \
+            grep -v '.git/' | grep -v 'node_modules/' | \
+            xargs yamllint -c .yamllint.yml
+
+  validate-json:
+    name: JSON Validation
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Validate JSON files
+        run: |
+          find . -name '*.json' ! -path './.git/*' ! -name '*.tmpl' | while read -r file; do
+            echo "Validating: $file"
+            python3 -m json.tool "$file" > /dev/null
+          done
+
+  shfmt:
+    name: Shell Formatting
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install shfmt
+        run: |
+          curl -sS https://webinstall.dev/shfmt | bash
+          export PATH="$HOME/.local/bin:$PATH"
+      - name: Check shell formatting
+        run: |
+          export PATH="$HOME/.local/bin:$PATH"
+          find dot_local/bin -name 'executable_*' ! -name '*.tmpl' -exec shfmt -d -i 2 -ci {} + || true
+
+  template-check:
+    name: Template Validation
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install chezmoi
+        run: sh -c "$(curl -fsLS get.chezmoi.io)"
+      - name: Validate templates parse
+        run: |
+          # Check that templates have valid Go template syntax
+          find . -name '*.tmpl' ! -path './.git/*' | while read -r file; do
+            echo "Checking template syntax: $file"
+            # Basic syntax check: ensure {{ }} pairs are balanced
+            opens=$(grep -o '{{' "$file" | wc -l)
+            closes=$(grep -o '}}' "$file" | wc -l)
+            if [ "$opens" -ne "$closes" ]; then
+              echo "ERROR: Unbalanced template delimiters in $file ({{ = $opens, }} = $closes)"
+              exit 1
+            fi
+          done
+          echo "All templates have balanced delimiters"

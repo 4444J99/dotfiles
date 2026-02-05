@@ -274,6 +274,51 @@ check_dependencies() {
   return 0
 }
 
+check_permissions() {
+  log_check "File permissions"
+
+  local issues=0
+
+  # SSH directory
+  if [[ -d "$HOME/.ssh" ]]; then
+    local ssh_perms
+    ssh_perms=$(stat -f '%Lp' "$HOME/.ssh" 2>/dev/null || stat -c '%a' "$HOME/.ssh" 2>/dev/null)
+    if [[ "$ssh_perms" != "700" ]]; then
+      log_warn "~/.ssh has permissions $ssh_perms (expected 700)"
+      issues=$((issues + 1))
+    fi
+  fi
+
+  # SSH config
+  if [[ -f "$HOME/.ssh/config" ]]; then
+    local config_perms
+    config_perms=$(stat -f '%Lp' "$HOME/.ssh/config" 2>/dev/null || stat -c '%a' "$HOME/.ssh/config" 2>/dev/null)
+    if [[ "$config_perms" != "600" && "$config_perms" != "644" ]]; then
+      log_warn "~/.ssh/config has permissions $config_perms (expected 600)"
+      issues=$((issues + 1))
+    fi
+  fi
+
+  # AWS credentials
+  if [[ -f "$HOME/.aws/credentials" ]]; then
+    local aws_perms
+    aws_perms=$(stat -f '%Lp' "$HOME/.aws/credentials" 2>/dev/null || stat -c '%a' "$HOME/.aws/credentials" 2>/dev/null)
+    if [[ "$aws_perms" != "600" ]]; then
+      log_warn "~/.aws/credentials has permissions $aws_perms (expected 600)"
+      issues=$((issues + 1))
+    fi
+  fi
+
+  if [[ $issues -gt 0 ]]; then
+    record_check "permissions" "warn" "$issues permission issues"
+    return 3
+  fi
+
+  log_ok "File permissions correct"
+  record_check "permissions" "ok" "all correct"
+  return 0
+}
+
 # ─────────────────────────────────────────────────────────────────────────────
 # State persistence
 # ─────────────────────────────────────────────────────────────────────────────
@@ -367,6 +412,7 @@ main() {
   check_drift || exit_codes="${exit_codes} $?"
   check_1password || exit_codes="${exit_codes} $?"
   check_dependencies || exit_codes="${exit_codes} $?"
+  check_permissions || exit_codes="${exit_codes} $?"
 
   # Determine final exit code (highest severity wins)
   FINAL_EXIT=0

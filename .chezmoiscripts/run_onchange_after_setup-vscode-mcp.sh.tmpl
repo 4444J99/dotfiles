@@ -1,8 +1,8 @@
-#!/bin/bash
+#!/usr/bin/env bash
 # Setup VS Code extensions and Cline MCP config
 # Runs when manifest.yaml vscode section changes
 
-set -e
+set -euo pipefail
 
 {{- if eq .chezmoi.os "darwin" }}
 

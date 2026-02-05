@@ -1,8 +1,8 @@
-#!/bin/bash
+#!/usr/bin/env bash
 # Bootstrap script for new machine setup
 # Runs when packages.txt changes
 
-set -e
+set -euo pipefail
 
 echo "🚀 Installing essential packages..."
 
@@ -20,6 +20,7 @@ if ! command -v brew &> /dev/null; then
 fi
 
 # Install essential packages
+# Bootstrap = minimum viable shell. Full manifest applied via `domus packages apply`.
 echo "📦 Installing essential Homebrew packages..."
 brew install \
   git \
@@ -31,12 +32,24 @@ brew install \
   fzf \
   ripgrep \
   jq \
+  yq \
   node \
   python3 \
   go \
   git-delta \
   lazygit \
   bat \
+  eza \
+  fd \
+  zoxide \
+  starship \
+  atuin \
+  direnv \
+  mise \
+  shfmt \
+  just \
+  zsh-autosuggestions \
+  zsh-syntax-highlighting \
   lolcat \
   navi \
   tlrc
@@ -48,6 +61,12 @@ if ! command -v pipx &>/dev/null; then
   pipx ensurepath
 fi
 pipx install pywal 2>/dev/null || pipx upgrade pywal 2>/dev/null || true
+
+# Rust toolchain (PATH managed in 10-path.zsh, XDG dirs in 15-env.zsh)
+if ! command -v rustup &>/dev/null; then
+  echo "📦 Installing Rust toolchain..."
+  curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh -s -- -y --no-modify-path
+fi
 
 # Initialize tlrc cache
 command -v tldr &>/dev/null && tldr --update || true

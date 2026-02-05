@@ -1,8 +1,8 @@
-#!/bin/bash
+#!/usr/bin/env bash
 # Post-installation setup script
 # Creates essential directories and symlinks
 
-set -e
+set -euo pipefail
 
 echo "📁 Setting up directory structure..."
 
@@ -18,6 +18,8 @@ mkdir -p ~/Documents/{Work,Personal,Archive,Notes}
 # Context system
 mkdir -p ~/.local/share/file-context/{manifests,links}
 mkdir -p ~/.local/share/file-context/links/{by-type,by-project,by-year,by-status}
+mkdir -p ~/.local/share/file-context/links/by-type/{code,docs,media,data}
+mkdir -p ~/.local/share/file-context/links/by-status/{active,archived,reference}
 
 # Domus state directories
 mkdir -p ~/.local/state/domus/{telemetry,snapshots}

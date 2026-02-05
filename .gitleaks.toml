@@ -1,0 +1,15 @@
+# Gitleaks configuration for chezmoi dotfiles repo
+# Allowlist patterns for template variables that look like secrets
+
+title = "domus-dotfiles"
+
+[allowlist]
+  description = "Chezmoi template patterns"
+  paths = [
+    '''\.tmpl$''',
+  ]
+  regexes = [
+    '''onepasswordRead\s+"op://''',
+    '''\{\{.*onepassword.*\}\}''',
+    '''op://Personal/''',
+  ]

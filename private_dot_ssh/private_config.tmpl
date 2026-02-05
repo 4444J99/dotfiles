@@ -14,6 +14,9 @@ Host *
 {{- end }}
 
 	# Security settings
+	HashKnownHosts yes
+	StrictHostKeyChecking ask
+	VisualHostKey yes
 	ServerAliveInterval 60
 	ServerAliveCountMax 3
 

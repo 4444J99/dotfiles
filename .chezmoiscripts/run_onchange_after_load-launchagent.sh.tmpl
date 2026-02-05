@@ -1,10 +1,10 @@
-#!/bin/bash
+#!/usr/bin/env bash
 # Load/reload launchd agents (chezmoi + domus)
 # Runs when plist files change
 
 {{- if eq .chezmoi.os "darwin" }}
 
-set -e
+set -euo pipefail
 
 echo "Managing launchd agents..."
 

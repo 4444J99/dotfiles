@@ -1,0 +1,11 @@
+# ShellCheck configuration for chezmoi-managed dotfiles
+shell=bash
+
+# Exclude chezmoi template variables ({{ .var }})
+# SC1091: Not following sourced files (templates/external)
+# SC2034: Variable appears unused (exported for other scripts)
+# SC2154: Variable referenced but not assigned (template variables)
+disable=SC1091,SC2154
+
+# Allow sourcing from non-constant paths
+external-sources=true

@@ -49,7 +49,6 @@ is_quiet_hours() {
   end_time=$(yq -r '.notifications.quiet_hours.end // "08:00"' "${MANIFEST}")
 
   local now_minutes start_minutes end_minutes
-  now_minutes=$(date +%H | sed 's/^0//')*60+$(date +%M | sed 's/^0//')
 
   local start_h start_m end_h end_m
   start_h=$(echo "$start_time" | cut -d: -f1 | sed 's/^0//')

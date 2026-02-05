@@ -1,7 +1,7 @@
-#!/bin/bash
+#!/usr/bin/env bash
 # Theme switching utility - pywal wrapper
 # Usage: theme-switch <image> | --restore | --tokyo-night | --list | --theme <name>
-set -e
+set -euo pipefail
 
 case "${1:-}" in
   -h|--help)

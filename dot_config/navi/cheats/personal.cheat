@@ -66,6 +66,32 @@ theme-switch --list
 # Apply built-in pywal theme
 theme-switch --theme <theme_name>
 
+% domus, home management
+
+# Domus status overview
+domus status
+
+# Domus full diagnostics
+domus doctor
+
+# Apply dotfiles and packages
+domus apply
+
+# Preview apply changes
+domus apply --dry-run
+
+# Check package drift
+domus packages diff
+
+# Install missing packages
+domus packages apply
+
+# Shell startup performance
+domus perf shell
+
+# File sorter daemon
+domus sort --watch
+
 % system, maintenance
 
 # Full system maintenance

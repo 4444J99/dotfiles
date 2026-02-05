@@ -71,26 +71,41 @@ if command -v mise &>/dev/null; then
   eval "$(mise activate zsh)"
 fi
 
-# Anaconda / Conda
+# ─────────────────────────────────────────────────────────────────────────────
+# Lazy-loaded tools (deferred until first use to reduce startup time)
+# ─────────────────────────────────────────────────────────────────────────────
+
+# Anaconda / Conda - lazy load on first `conda` call
 if [[ -d "/opt/anaconda3" ]]; then
-  __conda_setup="$('/opt/anaconda3/bin/conda' 'shell.zsh' 'hook' 2>/dev/null)"
-  if [[ $? -eq 0 ]]; then
-    eval "$__conda_setup"
-  else
-    export PATH="/opt/anaconda3/bin:$PATH"
-  fi
-  unset __conda_setup
+  conda() {
+    unfunction conda
+    __conda_setup="$('/opt/anaconda3/bin/conda' 'shell.zsh' 'hook' 2>/dev/null)"
+    if [[ $? -eq 0 ]]; then
+      eval "$__conda_setup"
+    else
+      export PATH="/opt/anaconda3/bin:$PATH"
+    fi
+    unset __conda_setup
+    conda "$@"
+  }
 fi
 
-# navi (interactive cheatsheet) - Ctrl+G
+# navi (interactive cheatsheet) - lazy load on Ctrl+G
 if command -v navi &>/dev/null; then
-  eval "$(navi widget zsh)"
+  _navi_init() {
+    eval "$(navi widget zsh)"
+    zle navi-widget 2>/dev/null || true
+  }
+  zle -N _navi_init
+  bindkey '^G' _navi_init
 fi
 
-# Google Cloud SDK
-if [[ -f "$HOME/google-cloud-sdk/path.zsh.inc" ]]; then
-  source "$HOME/google-cloud-sdk/path.zsh.inc"
-fi
-if [[ -f "$HOME/google-cloud-sdk/completion.zsh.inc" ]]; then
-  source "$HOME/google-cloud-sdk/completion.zsh.inc"
+# Google Cloud SDK - lazy load on first `gcloud` call
+if [[ -d "$HOME/google-cloud-sdk" ]]; then
+  gcloud() {
+    unfunction gcloud
+    [[ -f "$HOME/google-cloud-sdk/path.zsh.inc" ]] && source "$HOME/google-cloud-sdk/path.zsh.inc"
+    [[ -f "$HOME/google-cloud-sdk/completion.zsh.inc" ]] && source "$HOME/google-cloud-sdk/completion.zsh.inc"
+    gcloud "$@"
+  }
 fi

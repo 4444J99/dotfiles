@@ -92,7 +92,24 @@ if status is-interactive
             set -gx FZF_ALT_C_COMMAND 'fd --type d --hidden --follow --exclude .git'
         end
 
-        set -gx FZF_DEFAULT_OPTS '--height 40% --layout=reverse --border --info=inline'
+        # fzf appearance - Tokyo Night theme
+        set -gx FZF_DEFAULT_OPTS '
+            --height 40%
+            --layout=reverse
+            --border=rounded
+            --info=inline
+            --preview-window=right:50%:wrap
+            --color=bg+:#33467c,bg:#1a1b26,spinner:#7dcfff,hl:#7aa2f7
+            --color=fg:#c0caf5,header:#7aa2f7,info:#e0af68,pointer:#7dcfff
+            --color=marker:#9ece6a,fg+:#c0caf5,prompt:#bb9af7,hl+:#7aa2f7
+            --color=border:#3b4261
+            --pointer="▶"
+            --marker="✓"'
+
+        # Preview files with bat if available
+        if command -q bat
+            set -gx FZF_CTRL_T_OPTS "--preview 'bat --style=numbers --color=always --line-range :500 {}'"
+        end
     end
 
     # Atuin (shell history)
@@ -243,6 +260,102 @@ if status is-interactive
     abbr -a dma 'domus apply'
     abbr -a dmp 'domus packages'
     abbr -a dmpd 'domus packages diff'
+
+    # Health & recovery
+    abbr -a cmh chezmoi-health
+    abbr -a cmhv 'VERBOSE=1 chezmoi-health'
+    abbr -a cmr chezmoi-recover
+
+    # Lazygit
+    if command -q lazygit
+        alias lg lazygit
+    end
+
+    # ─────────────────────────────────────────────────────────────────────────
+    # Kitty Theme Helpers
+    # ─────────────────────────────────────────────────────────────────────────
+
+    function kthemes -d "List available kitty themes"
+        for f in ~/.config/kitty/themes/*.conf
+            basename $f .conf
+        end
+    end
+
+    function ktheme -d "Switch kitty theme by name"
+        if test (count $argv) -eq 0
+            echo "Usage: ktheme <theme-name>"
+            echo "Available themes:"
+            kthemes
+            return 1
+        end
+        if test -f ~/.config/kitty/themes/$argv[1].conf
+            kitty @ set-colors ~/.config/kitty/themes/$argv[1].conf
+            echo "Applied theme: $argv[1]"
+        else
+            echo "Theme not found: $argv[1]"
+            kthemes
+            return 1
+        end
+    end
+
+    # ─────────────────────────────────────────────────────────────────────────
+    # Utility Functions
+    # ─────────────────────────────────────────────────────────────────────────
+
+    function myip -d "Show public IP address"
+        curl -s https://api.ipify.org; and echo
+    end
+
+    function localip -d "Show local IP address"
+        ipconfig getifaddr en0
+    end
+
+    function cache-sizes -d "Show cache sizes"
+        echo "=== Package Manager Caches ==="
+        du -sh ~/Library/Caches/Homebrew 2>/dev/null; or true
+        du -sh ~/.npm 2>/dev/null; or true
+        du -sh ~/Library/Caches/pip 2>/dev/null; or true
+        du -sh ~/.cache/uv 2>/dev/null; or true
+        echo ""
+        echo "=== Browser & App Caches ==="
+        du -sh ~/Library/Caches/Google/Chrome 2>/dev/null; or true
+        du -sh ~/.cache/puppeteer 2>/dev/null; or true
+    end
+
+    function maintain -d "Full system maintenance"
+        echo "━━━ System Maintenance - "(date '+%Y-%m-%d %H:%M')" ━━━"
+        echo ""
+        echo "[1/4] Homebrew..."
+        command -q brew; and brew update; and brew upgrade; and brew cleanup; or echo "  Skipped"
+        echo ""
+        echo "[2/4] npm cache..."
+        command -q npm; and npm cache clean --force; or echo "  Skipped"
+        echo ""
+        echo "[3/4] pip cache..."
+        command -q pip3; and pip3 cache purge; or echo "  Skipped"
+        echo ""
+        echo "[4/4] uv cache..."
+        command -q uv; and uv cache prune --force; or echo "  Skipped"
+        echo ""
+        echo "━━━ Done! ━━━"
+    end
+
+    # Shell reload
+    alias reload 'source ~/.config/fish/config.fish'
+
+    # ─────────────────────────────────────────────────────────────────────────
+    # XDG Compliance
+    # ─────────────────────────────────────────────────────────────────────────
+
+    set -gx XDG_CONFIG_HOME $HOME/.config
+    set -gx XDG_DATA_HOME $HOME/.local/share
+    set -gx XDG_STATE_HOME $HOME/.local/state
+    set -gx XDG_CACHE_HOME $HOME/.cache
+    set -gx DOCKER_CONFIG $XDG_CONFIG_HOME/docker
+    set -gx CARGO_HOME $XDG_DATA_HOME/cargo
+    set -gx RUSTUP_HOME $XDG_DATA_HOME/rustup
+    set -gx NODE_REPL_HISTORY $XDG_STATE_HOME/node_repl_history
+    set -gx LESSHISTFILE $XDG_STATE_HOME/less/history
 
     # ─────────────────────────────────────────────────────────────────────────
     # Startup Timing - Record (Domus Telemetry)

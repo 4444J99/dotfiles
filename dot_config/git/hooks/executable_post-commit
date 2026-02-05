@@ -1,4 +1,4 @@
-#!/bin/bash
+#!/usr/bin/env bash
 # ─────────────────────────────────────────────────────────────────────────────
 # Git post-commit hook - Chezmoi integration
 # Managed by Chezmoi
