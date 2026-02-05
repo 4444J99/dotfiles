@@ -41,7 +41,7 @@ die() {
 # Check if we're in quiet hours
 is_quiet_hours() {
   if [[ ! -f "${MANIFEST}" ]] || ! command -v yq &>/dev/null; then
-    return 1  # Not in quiet hours if we can't check
+    return 1 # Not in quiet hours if we can't check
   fi
 
   local start_time end_time
@@ -164,7 +164,7 @@ add_to_batch() {
     --argjson count "$count" \
     '.events[$event] = {"count": $count, "last_message": $msg, "last_timestamp": $ts}')
 
-  echo "$batch_data" > "${BATCH_FILE}"
+  echo "$batch_data" >"${BATCH_FILE}"
 
   rmdir "${BATCH_LOCK}" 2>/dev/null
   trap - EXIT
@@ -218,10 +218,10 @@ flush_batch() {
         send_notification "$title" "${count} events: ${msg}"
       fi
     fi
-  done <<< "$events"
+  done <<<"$events"
 
   # Clear batch
-  echo '{"events": {}}' > "${BATCH_FILE}"
+  echo '{"events": {}}' >"${BATCH_FILE}"
 
   rmdir "${BATCH_LOCK}" 2>/dev/null
   trap - EXIT
@@ -300,19 +300,19 @@ main() {
 
   while [[ $# -gt 0 ]]; do
     case "$1" in
-      --level|-l)
+      --level | -l)
         level="$2"
         shift 2
         ;;
-      --event|-e)
+      --event | -e)
         event="$2"
         shift 2
         ;;
-      --title|-t)
+      --title | -t)
         title="$2"
         shift 2
         ;;
-      --message|-m)
+      --message | -m)
         message="$2"
         shift 2
         ;;
@@ -320,7 +320,7 @@ main() {
         do_flush=1
         shift
         ;;
-      -h|--help)
+      -h | --help)
         cat <<EOF
 domus-notify - Tiered notification dispatcher
 

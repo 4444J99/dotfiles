@@ -28,7 +28,7 @@ LOG_FILE="${STATE_DIR}/sort.log"
 BIN_DIR="${HOME}/.local/bin"
 
 DEBOUNCE_SECONDS=5
-MAX_LOG_SIZE=1048576  # 1MB
+MAX_LOG_SIZE=1048576 # 1MB
 
 # ─────────────────────────────────────────────────────────────────────────────
 # Colors
@@ -59,7 +59,7 @@ log() {
   shift
   local timestamp
   timestamp=$(date '+%Y-%m-%d %H:%M:%S')
-  echo "[${timestamp}] [${level}] $*" >> "${LOG_FILE}"
+  echo "[${timestamp}] [${level}] $*" >>"${LOG_FILE}"
 
   if [[ -t 1 ]]; then
     case "$level" in
@@ -115,10 +115,10 @@ get_pdf_title() {
     title=$(pdfinfo "$file" 2>/dev/null | grep -i '^Title:' | sed 's/^Title:[[:space:]]*//')
     if [[ -n "$title" && "$title" != "Untitled" && ${#title} -gt 3 ]]; then
       # Sanitize for filename
-      echo "$title" | tr '[:upper:]' '[:lower:]' | \
-        sed 's/[^a-z0-9 -]//g' | \
-        sed 's/  */ /g' | \
-        sed 's/ /-/g' | \
+      echo "$title" | tr '[:upper:]' '[:lower:]' |
+        sed 's/[^a-z0-9 -]//g' |
+        sed 's/  */ /g' |
+        sed 's/ /-/g' |
         cut -c1-50
       return
     fi
@@ -200,7 +200,7 @@ file_matches_rule() {
   filename=$(basename "$file")
   dir=$(dirname "$file")
   ext="${filename##*.}"
-  ext="${ext,,}"  # lowercase
+  ext="${ext,,}" # lowercase
 
   # Get rule match criteria
   local pattern
@@ -245,7 +245,7 @@ file_matches_rule() {
     now=$(date +%s)
     local file_mtime
     file_mtime=$(stat -f '%m' "$file" 2>/dev/null || stat -c '%Y' "$file" 2>/dev/null)
-    file_age=$(( (now - file_mtime) / 86400 ))
+    file_age=$(((now - file_mtime) / 86400))
     if [[ $file_age -lt $age_min ]]; then
       return 1
     fi
@@ -315,7 +315,7 @@ process_file() {
   num_rules=$(yq -r '.sorting.rules | length' "${MANIFEST}")
 
   # Try each rule
-  for ((i=0; i<num_rules; i++)); do
+  for ((i = 0; i < num_rules; i++)); do
     if file_matches_rule "$file" "$i"; then
       local dest
       dest=$(get_rule_action "$i" "$file")
@@ -355,7 +355,7 @@ process_file() {
                 --message "Sorted: ${filename}" &
             fi
 
-            return 1  # File was moved
+            return 1 # File was moved
           else
             log "ERROR" "Failed to move ${filename}"
           fi
@@ -365,7 +365,7 @@ process_file() {
     fi
   done
 
-  return 0  # No rule matched
+  return 0 # No rule matched
 }
 
 # ─────────────────────────────────────────────────────────────────────────────
@@ -411,7 +411,7 @@ cmd_run_once() {
         ((moved++)) || true
       fi
     done < <(find "$dir" -maxdepth 1 -type f -print0 2>/dev/null)
-  done <<< "$directories"
+  done <<<"$directories"
 
   log "INFO" "Sort complete: ${moved} files moved"
 
@@ -446,7 +446,7 @@ cmd_watch() {
       watch_dirs+=("$dir")
       log "INFO" "Watching: $dir"
     fi
-  done <<< "$directories"
+  done <<<"$directories"
 
   if [[ ${#watch_dirs[@]} -eq 0 ]]; then
     die "No valid directories to watch"
@@ -485,9 +485,15 @@ main() {
 
   while [[ $# -gt 0 ]]; do
     case "$1" in
-      --watch|-w) cmd="watch"; shift ;;
-      --dry-run|-n) dry_run=1; shift ;;
-      -h|--help)
+      --watch | -w)
+        cmd="watch"
+        shift
+        ;;
+      --dry-run | -n)
+        dry_run=1
+        shift
+        ;;
+      -h | --help)
         cat <<EOF
 domus-sort - Intelligent file sorter
 

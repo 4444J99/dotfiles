@@ -101,8 +101,8 @@ get_installed_pipx() {
 # Get installed npm global packages
 get_installed_npm() {
   if command -v npm &>/dev/null; then
-    npm list -g --depth=0 --json 2>/dev/null | \
-      jq -r '.dependencies // {} | keys[]' 2>/dev/null | \
+    npm list -g --depth=0 --json 2>/dev/null |
+      jq -r '.dependencies // {} | keys[]' 2>/dev/null |
       command grep -v '^npm$' | sort || true
   fi
 }
@@ -166,8 +166,14 @@ cmd_status() {
 
   while [[ $# -gt 0 ]]; do
     case "$1" in
-      --quiet|-q) quiet_mode=1; shift ;;
-      --json) json_mode=1; shift ;;
+      --quiet | -q)
+        quiet_mode=1
+        shift
+        ;;
+      --json)
+        json_mode=1
+        shift
+        ;;
       *) shift ;;
     esac
   done
@@ -185,11 +191,26 @@ cmd_status() {
     local manifest_list installed_list missing extra
 
     case "$mgr" in
-      formulae) manifest_list=$(get_manifest_formulae); installed_list=$(get_installed_formulae) ;;
-      casks) manifest_list=$(get_manifest_casks); installed_list=$(get_installed_casks) ;;
-      pipx) manifest_list=$(get_manifest_pipx); installed_list=$(get_installed_pipx) ;;
-      npm) manifest_list=$(get_manifest_npm); installed_list=$(get_installed_npm) ;;
-      cargo) manifest_list=$(get_manifest_cargo); installed_list=$(get_installed_cargo) ;;
+      formulae)
+        manifest_list=$(get_manifest_formulae)
+        installed_list=$(get_installed_formulae)
+        ;;
+      casks)
+        manifest_list=$(get_manifest_casks)
+        installed_list=$(get_installed_casks)
+        ;;
+      pipx)
+        manifest_list=$(get_manifest_pipx)
+        installed_list=$(get_installed_pipx)
+        ;;
+      npm)
+        manifest_list=$(get_manifest_npm)
+        installed_list=$(get_installed_npm)
+        ;;
+      cargo)
+        manifest_list=$(get_manifest_cargo)
+        installed_list=$(get_installed_cargo)
+        ;;
     esac
 
     if [[ -n "$manifest_list" ]]; then
@@ -239,7 +260,10 @@ cmd_diff() {
 
   while [[ $# -gt 0 ]]; do
     case "$1" in
-      --json) json_mode=1; shift ;;
+      --json)
+        json_mode=1
+        shift
+        ;;
       *) shift ;;
     esac
   done
@@ -263,8 +287,10 @@ cmd_diff() {
 
     [[ -z "$manifest_list" ]] && return
 
-    local missing; missing=$(diff_missing "$manifest_list" "$installed_list")
-    local extra; extra=$(diff_extra "$manifest_list" "$installed_list")
+    local missing
+    missing=$(diff_missing "$manifest_list" "$installed_list")
+    local extra
+    extra=$(diff_extra "$manifest_list" "$installed_list")
 
     if [[ -n "$missing" || -n "$extra" ]]; then
       has_drift=1
@@ -297,8 +323,10 @@ cmd_diff() {
     local json_output='{"drift": {'
 
     # Formulae
-    local m; m=$(diff_missing "$(get_manifest_formulae)" "$(get_installed_formulae)" | jq -R . | jq -s .)
-    local e; e=$(diff_extra "$(get_manifest_formulae)" "$(get_installed_formulae)" | jq -R . | jq -s .)
+    local m
+    m=$(diff_missing "$(get_manifest_formulae)" "$(get_installed_formulae)" | jq -R . | jq -s .)
+    local e
+    e=$(diff_extra "$(get_manifest_formulae)" "$(get_installed_formulae)" | jq -R . | jq -s .)
     json_output+='"formulae": {"missing": '"$m"', "extra": '"$e"'},'
 
     # Casks
@@ -336,7 +364,10 @@ cmd_apply() {
 
   while [[ $# -gt 0 ]]; do
     case "$1" in
-      --dry-run|-n) dry_run=1; shift ;;
+      --dry-run | -n)
+        dry_run=1
+        shift
+        ;;
       *) shift ;;
     esac
   done
@@ -347,7 +378,8 @@ cmd_apply() {
   local exit_code=0
 
   # Install missing homebrew formulae
-  local missing_formulae; missing_formulae=$(diff_missing "$(get_manifest_formulae)" "$(get_installed_formulae)")
+  local missing_formulae
+  missing_formulae=$(diff_missing "$(get_manifest_formulae)" "$(get_installed_formulae)")
   if [[ -n "$missing_formulae" ]]; then
     echo "$missing_formulae" | while read -r pkg; do
       [[ -z "$pkg" ]] && continue
@@ -355,13 +387,17 @@ cmd_apply() {
         info "[dry-run] Would install formula: $pkg"
       else
         info "Installing formula: $pkg"
-        brew install "$pkg" || { warn "Failed to install $pkg"; exit_code=1; }
+        brew install "$pkg" || {
+          warn "Failed to install $pkg"
+          exit_code=1
+        }
       fi
     done
   fi
 
   # Install missing homebrew casks
-  local missing_casks; missing_casks=$(diff_missing "$(get_manifest_casks)" "$(get_installed_casks)")
+  local missing_casks
+  missing_casks=$(diff_missing "$(get_manifest_casks)" "$(get_installed_casks)")
   if [[ -n "$missing_casks" ]]; then
     echo "$missing_casks" | while read -r pkg; do
       [[ -z "$pkg" ]] && continue
@@ -369,13 +405,17 @@ cmd_apply() {
         info "[dry-run] Would install cask: $pkg"
       else
         info "Installing cask: $pkg"
-        brew install --cask "$pkg" || { warn "Failed to install $pkg"; exit_code=1; }
+        brew install --cask "$pkg" || {
+          warn "Failed to install $pkg"
+          exit_code=1
+        }
       fi
     done
   fi
 
   # Install missing pipx packages
-  local missing_pipx; missing_pipx=$(diff_missing "$(get_manifest_pipx)" "$(get_installed_pipx)")
+  local missing_pipx
+  missing_pipx=$(diff_missing "$(get_manifest_pipx)" "$(get_installed_pipx)")
   if [[ -n "$missing_pipx" ]] && command -v pipx &>/dev/null; then
     echo "$missing_pipx" | while read -r pkg; do
       [[ -z "$pkg" ]] && continue
@@ -383,13 +423,17 @@ cmd_apply() {
         info "[dry-run] Would install pipx: $pkg"
       else
         info "Installing pipx: $pkg"
-        pipx install "$pkg" || { warn "Failed to install $pkg"; exit_code=1; }
+        pipx install "$pkg" || {
+          warn "Failed to install $pkg"
+          exit_code=1
+        }
       fi
     done
   fi
 
   # Install missing npm global packages
-  local missing_npm; missing_npm=$(diff_missing "$(get_manifest_npm)" "$(get_installed_npm)")
+  local missing_npm
+  missing_npm=$(diff_missing "$(get_manifest_npm)" "$(get_installed_npm)")
   if [[ -n "$missing_npm" ]] && command -v npm &>/dev/null; then
     echo "$missing_npm" | while read -r pkg; do
       [[ -z "$pkg" ]] && continue
@@ -397,13 +441,17 @@ cmd_apply() {
         info "[dry-run] Would install npm: $pkg"
       else
         info "Installing npm: $pkg"
-        npm install -g "$pkg" || { warn "Failed to install $pkg"; exit_code=1; }
+        npm install -g "$pkg" || {
+          warn "Failed to install $pkg"
+          exit_code=1
+        }
       fi
     done
   fi
 
   # Install missing cargo packages
-  local missing_cargo; missing_cargo=$(diff_missing "$(get_manifest_cargo)" "$(get_installed_cargo)")
+  local missing_cargo
+  missing_cargo=$(diff_missing "$(get_manifest_cargo)" "$(get_installed_cargo)")
   if [[ -n "$missing_cargo" ]] && command -v cargo &>/dev/null; then
     echo "$missing_cargo" | while read -r pkg; do
       [[ -z "$pkg" ]] && continue
@@ -411,7 +459,10 @@ cmd_apply() {
         info "[dry-run] Would install cargo: $pkg"
       else
         info "Installing cargo: $pkg"
-        cargo install "$pkg" || { warn "Failed to install $pkg"; exit_code=1; }
+        cargo install "$pkg" || {
+          warn "Failed to install $pkg"
+          exit_code=1
+        }
       fi
     done
   fi
@@ -436,13 +487,18 @@ cmd_snapshot() {
 
   info "Creating package snapshot..."
 
-  local formulae; formulae=$(get_installed_formulae | jq -R . | jq -s .)
-  local casks; casks=$(get_installed_casks | jq -R . | jq -s .)
-  local pipx; pipx=$(get_installed_pipx | jq -R . | jq -s .)
-  local npm; npm=$(get_installed_npm | jq -R . | jq -s .)
-  local cargo; cargo=$(get_installed_cargo | jq -R . | jq -s .)
+  local formulae
+  formulae=$(get_installed_formulae | jq -R . | jq -s .)
+  local casks
+  casks=$(get_installed_casks | jq -R . | jq -s .)
+  local pipx
+  pipx=$(get_installed_pipx | jq -R . | jq -s .)
+  local npm
+  npm=$(get_installed_npm | jq -R . | jq -s .)
+  local cargo
+  cargo=$(get_installed_cargo | jq -R . | jq -s .)
 
-  cat <<EOF > "$snapshot"
+  cat <<EOF >"$snapshot"
 {
   "timestamp": "$(date -u +"%Y-%m-%dT%H:%M:%SZ")",
   "packages": {
@@ -481,7 +537,7 @@ main() {
     snapshot)
       cmd_snapshot "$@"
       ;;
-    -h|--help)
+    -h | --help)
       cat <<EOF
 domus-packages - Package tracking and drift detection
 

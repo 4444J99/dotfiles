@@ -37,8 +37,8 @@ TELEMETRY_DIR="${STATE_DIR}/telemetry"
 
 # Defaults
 ONLY_WHEN_IDLE=true
-IDLE_THRESHOLD_SECONDS=300  # 5 minutes
-MAX_LOG_SIZE=1048576        # 1MB
+IDLE_THRESHOLD_SECONDS=300 # 5 minutes
+MAX_LOG_SIZE=1048576       # 1MB
 
 # Runtime flags
 FORCE_RUN=0
@@ -50,9 +50,15 @@ VERBOSE=0
 
 while [[ $# -gt 0 ]]; do
   case "$1" in
-    --force|-f) FORCE_RUN=1; shift ;;
-    --verbose|-v) VERBOSE=1; shift ;;
-    --help|-h)
+    --force | -f)
+      FORCE_RUN=1
+      shift
+      ;;
+    --verbose | -v)
+      VERBOSE=1
+      shift
+      ;;
+    --help | -h)
       echo "Usage: domus-daemon [--force] [--verbose]"
       exit 0
       ;;
@@ -72,7 +78,7 @@ log() {
   shift
   local timestamp
   timestamp=$(date '+%Y-%m-%d %H:%M:%S')
-  echo "[${timestamp}] [${level}] $*" >> "${LOG_FILE}"
+  echo "[${timestamp}] [${level}] $*" >>"${LOG_FILE}"
 
   if [[ $VERBOSE -eq 1 ]] || [[ -t 1 ]]; then
     echo "[${level}] $*"
@@ -105,7 +111,7 @@ acquire_lock() {
     rm -f "${LOCK_FILE}"
   fi
 
-  echo $$ > "${LOCK_FILE}"
+  echo $$ >"${LOCK_FILE}"
   trap 'rm -f "${LOCK_FILE}"' EXIT
   return 0
 }
@@ -116,7 +122,7 @@ acquire_lock() {
 
 check_idle() {
   if [[ "$(uname)" != "Darwin" ]]; then
-    return 0  # Skip on non-macOS
+    return 0 # Skip on non-macOS
   fi
 
   local idle_time
@@ -142,14 +148,14 @@ record_daemon_run() {
   timestamp=$(date -u +"%Y-%m-%dT%H:%M:%SZ")
 
   echo "{\"timestamp\":\"${timestamp}\",\"ms\":${duration_ms},\"status\":\"${status}\"}" \
-    >> "${TELEMETRY_DIR}/daemon-runs.jsonl"
+    >>"${TELEMETRY_DIR}/daemon-runs.jsonl"
 
   # Keep file under 100 entries
   if [[ -f "${TELEMETRY_DIR}/daemon-runs.jsonl" ]]; then
     local lines
-    lines=$(wc -l < "${TELEMETRY_DIR}/daemon-runs.jsonl")
+    lines=$(wc -l <"${TELEMETRY_DIR}/daemon-runs.jsonl")
     if [[ $lines -gt 100 ]]; then
-      tail -50 "${TELEMETRY_DIR}/daemon-runs.jsonl" > "${TELEMETRY_DIR}/daemon-runs.jsonl.tmp"
+      tail -50 "${TELEMETRY_DIR}/daemon-runs.jsonl" >"${TELEMETRY_DIR}/daemon-runs.jsonl.tmp"
       mv "${TELEMETRY_DIR}/daemon-runs.jsonl.tmp" "${TELEMETRY_DIR}/daemon-runs.jsonl"
     fi
   fi

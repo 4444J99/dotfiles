@@ -163,7 +163,10 @@ cmd_status() {
   local json_mode=0
   while [[ $# -gt 0 ]]; do
     case "$1" in
-      --json) json_mode=1; shift ;;
+      --json)
+        json_mode=1
+        shift
+        ;;
       *) shift ;;
     esac
   done
@@ -201,7 +204,10 @@ cmd_status() {
     pkg_status=$("${BIN_DIR}/domus-packages" status --quiet 2>/dev/null || true)
     case "$pkg_status" in
       synced) printf '%s✓%s synced\n' "$GREEN" "$RESET" ;;
-      drift) printf '%s!%s drift detected\n' "$YELLOW" "$RESET"; exit_code=1 ;;
+      drift)
+        printf '%s!%s drift detected\n' "$YELLOW" "$RESET"
+        exit_code=1
+        ;;
       *) printf '%s○%s unknown\n' "$DIM" "$RESET" ;;
     esac
   else
@@ -302,9 +308,18 @@ cmd_apply() {
 
   while [[ $# -gt 0 ]]; do
     case "$1" in
-      --dry-run) dry_run=1; shift ;;
-      --dotfiles) dotfiles_only=1; shift ;;
-      --packages) packages_only=1; shift ;;
+      --dry-run)
+        dry_run=1
+        shift
+        ;;
+      --dotfiles)
+        dotfiles_only=1
+        shift
+        ;;
+      --packages)
+        packages_only=1
+        shift
+        ;;
       *) shift ;;
     esac
   done
@@ -353,7 +368,10 @@ cmd_sort() {
 
   while [[ $# -gt 0 ]]; do
     case "$1" in
-      --watch) watch_mode=1; shift ;;
+      --watch)
+        watch_mode=1
+        shift
+        ;;
       *) shift ;;
     esac
   done
@@ -378,10 +396,10 @@ cmd_packages() {
   fi
 
   case "$subcmd" in
-    diff|apply|status)
+    diff | apply | status)
       exec "${BIN_DIR}/domus-packages" "$subcmd" "$@"
       ;;
-    ""|--json)
+    "" | --json)
       exec "${BIN_DIR}/domus-packages" status "$subcmd" "$@"
       ;;
     *)
@@ -397,7 +415,10 @@ cmd_perf() {
 
   while [[ $# -gt 0 ]]; do
     case "$1" in
-      --json) json_mode=1; shift ;;
+      --json)
+        json_mode=1
+        shift
+        ;;
       *) shift ;;
     esac
   done
@@ -574,7 +595,10 @@ cmd_doctor() {
     pkg_status=$("${BIN_DIR}/domus-packages" status --quiet 2>/dev/null || echo "unknown")
     case "$pkg_status" in
       synced) printf '%s✓%s in sync with manifest\n' "$GREEN" "$RESET" ;;
-      drift) printf '%s!%s drift detected\n' "$YELLOW" "$RESET"; exit_code=1 ;;
+      drift)
+        printf '%s!%s drift detected\n' "$YELLOW" "$RESET"
+        exit_code=1
+        ;;
       *) printf '%s○%s unable to check\n' "$DIM" "$RESET" ;;
     esac
   else
@@ -675,10 +699,10 @@ main() {
   shift 2>/dev/null || true
 
   case "$cmd" in
-    -h|--help|help)
+    -h | --help | help)
       cmd_help
       ;;
-    -v|--version|version)
+    -v | --version | version)
       cmd_version
       ;;
     status)
@@ -690,16 +714,16 @@ main() {
     sort)
       cmd_sort "$@"
       ;;
-    packages|pkg)
+    packages | pkg)
       cmd_packages "$@"
       ;;
-    perf|performance)
+    perf | performance)
       cmd_perf "$@"
       ;;
     health)
       cmd_health "$@"
       ;;
-    doctor|doc)
+    doctor | doc)
       cmd_doctor "$@"
       ;;
     *)
