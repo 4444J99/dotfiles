@@ -5,67 +5,63 @@ set -euo pipefail
 
 log() { printf '  %s\n' "$*"; }
 
-trash() {
+sort_to() {
+  local f="$1" dest="$2"
+  if [[ -e "$f" ]]; then
+    mkdir -p "$dest"
+    mv "$f" "$dest/"
+    log "Sorted $(basename "$f") → ${dest/#$HOME/~}/"
+  fi
+}
+
+delete() {
   local f="$1"
   if [[ -e "$f" ]]; then
-    mv "$f" "$HOME/.Trash/"
-    log "Trashed $(basename "$f")"
+    rm -rf "$f"
+    log "Deleted $(basename "$f")"
   fi
 }
 
 echo "🧹 Cleaning up home directory clutter..."
 
 # ─────────────────────────────────────────────────────────────────────────────
-# 5a. Delete stale AI session artifacts (move to Trash)
+# 1. Sort metasystem-core docs → ~/Workspace/metasystem-core/
 # ─────────────────────────────────────────────────────────────────────────────
+
+metasystem="$HOME/Workspace/metasystem-core"
 
 for f in "$HOME"/PHASE_*.md; do
-  [[ -e "$f" ]] && trash "$f"
+  [[ -e "$f" ]] && sort_to "$f" "$metasystem"
 done
 
-trash "$HOME/FIXES_COMPLETED.md"
-trash "$HOME/SESSION_AUDIT_REPORT.md"
-trash "$HOME/MIGRATION_LOG.md"
-trash "$HOME/SYSTEM_FIXES_APPLIED.md"
-trash "$HOME/SYSTEM_FIXES_README.md"
-trash "$HOME/STANDARD_REPO_LAYOUT.md"
-trash "$HOME/TEAM_STRUCTURE.md"
-trash "$HOME/backup_manifest.txt"
-trash "$HOME/com.visualstudio.code.tunnel.plist"
+sort_to "$HOME/FIXES_COMPLETED.md"  "$metasystem"
+sort_to "$HOME/MIGRATION_LOG.md"    "$metasystem"
 
 # ─────────────────────────────────────────────────────────────────────────────
-# 5b. Delete orphaned npm artifacts in HOME
+# 2. Delete orphaned/empty items (no useful content)
 # ─────────────────────────────────────────────────────────────────────────────
 
-trash "$HOME/package.json"
-trash "$HOME/package-lock.json"
+delete "$HOME/com.visualstudio.code.tunnel.plist"
+delete "$HOME/package.json"
+delete "$HOME/package-lock.json"
 if [[ -d "$HOME/node_modules" ]]; then
   rm -rf "$HOME/node_modules"
-  log "Removed ~/node_modules/"
+  log "Deleted node_modules/"
 fi
 if [[ -d "$HOME/path" ]]; then
-  trash "$HOME/path"
+  delete "$HOME/path"
 fi
 
 # ─────────────────────────────────────────────────────────────────────────────
-# 5c. Move docs to ~/Documents
+# 3. Sort docs → ~/Documents/
 # ─────────────────────────────────────────────────────────────────────────────
 
-mkdir -p "$HOME/Documents"
-
-for f in \
-  "$HOME/knowledge-system-design.md" \
-  "$HOME/BOOTSTRAP.md" \
-  "$HOME/# Blueprint for a Self-Evolving Creative Operating System.md"
-do
-  if [[ -e "$f" ]]; then
-    mv "$f" "$HOME/Documents/"
-    log "Moved $(basename "$f") → ~/Documents/"
-  fi
-done
+sort_to "$HOME/knowledge-system-design.md"                                "$HOME/Documents"
+sort_to "$HOME/BOOTSTRAP.md"                                              "$HOME/Documents"
+sort_to "$HOME/# Blueprint for a Self-Evolving Creative Operating System.md" "$HOME/Documents"
 
 # ─────────────────────────────────────────────────────────────────────────────
-# 5d. Move stray projects to ~/Workspace
+# 4. Sort stray projects → ~/Workspace/
 # ─────────────────────────────────────────────────────────────────────────────
 
 mkdir -p "$HOME/Workspace"
@@ -76,7 +72,7 @@ for d in cloudbase-mcp Mole src; do
       log "Skipped ~/$d (~/Workspace/$d already exists)"
     else
       mv "$HOME/$d" "$HOME/Workspace/"
-      log "Moved ~/$d → ~/Workspace/$d"
+      log "Sorted ~/$d → ~/Workspace/$d"
     fi
   fi
 done
