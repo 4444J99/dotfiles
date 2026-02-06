@@ -12,10 +12,10 @@ photo_log_dir="${log_root}/photo_sort"
 normalize_py="${HOME}/.local/bin/normalize-names"
 photo_py="${HOME}/.local/bin/photo-sort"
 
-apply=0
+apply=""
 include_gdrive=0
 with_photo=0
-keep_photo_names=0
+keep_photo_names=""
 only_when_locked=0
 min_interval_hours=0
 last_run_file="${log_root}/naming-maintenance.last"
@@ -160,4 +160,4 @@ if (( with_photo )); then
   run_photo_sort "${icloud_root}/Media/Photos/2025/inbox"
 fi
 
-echo "Done. Mode: $([[ $apply -eq 1 ]] && echo apply || echo dry-run)."
+echo "Done. Mode: $([[ -n "$apply" ]] && echo apply || echo dry-run)."
