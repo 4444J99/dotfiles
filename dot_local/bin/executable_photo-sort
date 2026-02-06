@@ -1,0 +1,193 @@
+#!/usr/bin/env python3
+"""
+Sort photos from an inbox directory into a YYYY/MM/ date-based hierarchy.
+
+Reads EXIF DateTimeOriginal when available, falls back to file mtime.
+Dry run by default; pass --apply to move files.
+"""
+from __future__ import annotations
+
+import argparse
+import datetime as dt
+import os
+import struct
+import sys
+from pathlib import Path
+
+IMAGE_EXTS = {".png", ".jpg", ".jpeg", ".heic", ".gif", ".tif", ".tiff", ".bmp", ".webp"}
+VIDEO_EXTS = {".mov", ".mp4", ".m4v", ".avi", ".mkv", ".webm", ".3gp"}
+MEDIA_EXTS = IMAGE_EXTS | VIDEO_EXTS
+
+
+def read_exif_date(path: Path) -> dt.datetime | None:
+    """Extract EXIF DateTimeOriginal from JPEG files without external deps."""
+    if path.suffix.lower() not in {".jpg", ".jpeg", ".tif", ".tiff"}:
+        return None
+    try:
+        with open(path, "rb") as f:
+            header = f.read(2)
+            if header != b"\xff\xd8":
+                return None
+            while True:
+                marker = f.read(2)
+                if len(marker) < 2:
+                    return None
+                if marker[0] != 0xFF:
+                    return None
+                if marker[1] == 0xD9:
+                    return None  # End of image
+                if marker[1] == 0xDA:
+                    return None  # Start of scan (no more metadata)
+                size_bytes = f.read(2)
+                if len(size_bytes) < 2:
+                    return None
+                size = struct.unpack(">H", size_bytes)[0]
+                data = f.read(size - 2)
+                if marker[1] == 0xE1 and data[:4] == b"Exif":
+                    return _parse_exif_date(data)
+    except Exception:
+        return None
+    return None
+
+
+def _parse_exif_date(exif_data: bytes) -> dt.datetime | None:
+    """Parse DateTimeOriginal (tag 0x9003) from raw EXIF APP1 data."""
+    try:
+        # Skip "Exif\x00\x00"
+        tiff_data = exif_data[6:]
+        if len(tiff_data) < 8:
+            return None
+        byte_order = tiff_data[:2]
+        if byte_order == b"II":
+            endian = "<"
+        elif byte_order == b"MM":
+            endian = ">"
+        else:
+            return None
+
+        ifd_offset = struct.unpack(endian + "I", tiff_data[4:8])[0]
+        # Search IFD0 for ExifIFD pointer (tag 0x8769)
+        exif_ifd_offset = _find_tag(tiff_data, ifd_offset, 0x8769, endian)
+        if exif_ifd_offset is None:
+            return None
+        # Read the offset value
+        exif_offset = struct.unpack(endian + "I",
+                                    tiff_data[exif_ifd_offset + 8:exif_ifd_offset + 12])[0]
+        # Search ExifIFD for DateTimeOriginal (tag 0x9003)
+        dto_offset = _find_tag(tiff_data, exif_offset, 0x9003, endian)
+        if dto_offset is None:
+            return None
+        # The value is an offset to a 20-byte ASCII string
+        val_offset = struct.unpack(endian + "I", tiff_data[dto_offset + 8:dto_offset + 12])[0]
+        date_str = tiff_data[val_offset:val_offset + 19].decode("ascii", errors="replace")
+        return dt.datetime.strptime(date_str, "%Y:%m:%d %H:%M:%S")
+    except Exception:
+        return None
+
+
+def _find_tag(tiff_data: bytes, ifd_offset: int, target_tag: int, endian: str) -> int | None:
+    """Find a tag entry offset within an IFD."""
+    try:
+        num_entries = struct.unpack(endian + "H", tiff_data[ifd_offset:ifd_offset + 2])[0]
+        for i in range(num_entries):
+            entry_offset = ifd_offset + 2 + i * 12
+            tag = struct.unpack(endian + "H", tiff_data[entry_offset:entry_offset + 2])[0]
+            if tag == target_tag:
+                return entry_offset
+    except Exception:
+        pass
+    return None
+
+
+def get_file_date(path: Path) -> dt.datetime:
+    """Get the best date for a media file: EXIF first, then mtime."""
+    exif_date = read_exif_date(path)
+    if exif_date is not None:
+        return exif_date
+    mtime = path.stat().st_mtime
+    return dt.datetime.fromtimestamp(mtime)
+
+
+def unique_dest(dest: Path) -> Path:
+    """Return a non-colliding path by appending -dup-N suffix."""
+    if not dest.exists():
+        return dest
+    stem = dest.stem
+    suffix = dest.suffix
+    counter = 1
+    while True:
+        candidate = dest.with_name(f"{stem}-dup-{counter}{suffix}")
+        if not candidate.exists():
+            return candidate
+        counter += 1
+
+
+def main() -> None:
+    parser = argparse.ArgumentParser(description=__doc__,
+                                     formatter_class=argparse.RawDescriptionHelpFormatter)
+    parser.add_argument("--root", required=True, help="Photo inbox directory to sort.")
+    parser.add_argument("--apply", action="store_true", help="Move files (default: dry run).")
+    parser.add_argument("--keep-names", action="store_true",
+                        help="Keep original filenames (default: rename to date-based).")
+    parser.add_argument("--log", default="", help="Optional log file path.")
+    args = parser.parse_args()
+
+    root = Path(args.root).expanduser().resolve()
+    if not root.is_dir():
+        print(f"Error: root not found or not a directory: {root}", file=sys.stderr)
+        sys.exit(1)
+
+    log_fh = None
+    if args.log:
+        log_path = Path(args.log).expanduser()
+        log_path.parent.mkdir(parents=True, exist_ok=True)
+        log_fh = open(log_path, "w", encoding="utf-8")
+
+    def log(line: str) -> None:
+        print(line)
+        if log_fh:
+            log_fh.write(line + "\n")
+
+    moved = 0
+    skipped = 0
+
+    for path in sorted(root.iterdir()):
+        if path.is_dir():
+            continue
+        if path.name.startswith("."):
+            skipped += 1
+            continue
+
+        ext = path.suffix.lower()
+        if ext not in MEDIA_EXTS:
+            log(f"[skip non-media] {path.name}")
+            skipped += 1
+            continue
+
+        file_date = get_file_date(path)
+        year_month_dir = root.parent / file_date.strftime("%Y") / file_date.strftime("%m")
+
+        if args.keep_names:
+            new_name = path.name
+        else:
+            # Rename to date-based: YYYYMMDD-HHMMSS.ext
+            new_name = file_date.strftime("%Y%m%d-%H%M%S") + ext
+
+        dest = unique_dest(year_month_dir / new_name)
+
+        if args.apply:
+            dest.parent.mkdir(parents=True, exist_ok=True)
+            path.rename(dest)
+        action = "move" if args.apply else "would move"
+        log(f"[{action}] {path.name} -> {dest.relative_to(root.parent)}")
+        moved += 1
+
+    mode = "applied" if args.apply else "dry run"
+    log(f"Done. moved={moved}, skipped={skipped} ({mode}).")
+
+    if log_fh:
+        log_fh.close()
+
+
+if __name__ == "__main__":
+    main()

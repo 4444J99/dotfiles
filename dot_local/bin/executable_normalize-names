@@ -1,0 +1,209 @@
+#!/usr/bin/env python3
+"""
+Normalize filenames in a directory tree to lowercase-dashes convention.
+
+Rules:
+  - Lowercase all characters
+  - Replace spaces, underscores, and dots (except the final extension dot) with dashes
+  - Strip parentheses, brackets, curly braces, and their contents if empty
+  - Replace parentheses/brackets around content with dashes
+  - Collapse consecutive dashes
+  - Strip leading/trailing dashes from the stem
+
+Dry run by default; pass --apply to rename.
+"""
+from __future__ import annotations
+
+import argparse
+import os
+import re
+import shutil
+import sys
+from pathlib import Path
+
+
+def normalize_name(name: str) -> str:
+    """Normalize a single filename (not a path)."""
+    # Split stem and extension
+    # Handle multi-part extensions like .tar.gz
+    multi_exts = [".tar.gz", ".tar.xz", ".tar.bz2", ".tar.zst", ".tar.lz4", ".tar.lz"]
+    ext = ""
+    lower_name = name.lower()
+    for mext in multi_exts:
+        if lower_name.endswith(mext):
+            ext = name[-len(mext):]
+            stem = name[:-len(mext)]
+            break
+    else:
+        stem, ext = os.path.splitext(name)
+
+    # Lowercase everything
+    stem = stem.lower()
+    ext = ext.lower()
+
+    # Remove empty bracket pairs: (), [], {}
+    stem = re.sub(r"\(\s*\)|\[\s*\]|\{\s*\}", "", stem)
+
+    # Replace brackets with dashes (keep the content inside)
+    stem = re.sub(r"[(){}\[\]]", "-", stem)
+
+    # Replace spaces, underscores, plus signs, and commas with dashes
+    stem = re.sub(r"[\s_+,]+", "-", stem)
+
+    # Replace dots in stem with dashes (dots are separators in cloud filenames)
+    stem = stem.replace(".", "-")
+
+    # Strip characters that don't belong in clean filenames
+    stem = re.sub(r"[!@#$%^&*=~`'\";:<>?|\\]", "", stem)
+
+    # Collapse multiple dashes
+    stem = re.sub(r"-{2,}", "-", stem)
+
+    # Strip leading/trailing dashes
+    stem = stem.strip("-")
+
+    if not stem:
+        stem = "unnamed"
+
+    return stem + ext
+
+
+def unique_dest(dest: Path) -> Path:
+    """Return a non-colliding path by appending -N suffix."""
+    if not dest.exists():
+        return dest
+    stem = dest.stem
+    suffix = dest.suffix
+    counter = 1
+    while True:
+        candidate = dest.with_name(f"{stem}-{counter}{suffix}")
+        if not candidate.exists():
+            return candidate
+        counter += 1
+
+
+def walk_bottom_up(root: Path):
+    """Yield (dirpath, dirnames, filenames) bottom-up so renames don't break traversal."""
+    entries = []
+    for dirpath, dirnames, filenames in os.walk(root, topdown=False):
+        entries.append((Path(dirpath), dirnames, filenames))
+    return entries
+
+
+def main() -> None:
+    parser = argparse.ArgumentParser(description=__doc__,
+                                     formatter_class=argparse.RawDescriptionHelpFormatter)
+    parser.add_argument("--root", required=True, help="Directory tree to normalize.")
+    parser.add_argument("--apply", action="store_true", help="Perform renames (default: dry run).")
+    parser.add_argument("--move-conflicts", action="store_true",
+                        help="Move files to a conflicts/ dir when normalized name collides.")
+    parser.add_argument("--remove-zero", action="store_true",
+                        help="Remove zero-byte files (except .gitkeep/.keep).")
+    args = parser.parse_args()
+
+    root = Path(args.root).expanduser().resolve()
+    if not root.is_dir():
+        print(f"Error: root not found or not a directory: {root}", file=sys.stderr)
+        sys.exit(1)
+
+    conflicts_dir = root / ".normalize-conflicts"
+    renamed = 0
+    removed = 0
+    conflicts = 0
+    skipped = 0
+
+    for dirpath, dirnames, filenames in walk_bottom_up(root):
+        # Skip hidden directories and the conflicts dir itself
+        if any(part.startswith(".") for part in dirpath.relative_to(root).parts):
+            continue
+
+        # Process files
+        for fname in filenames:
+            fpath = dirpath / fname
+
+            # Skip hidden files
+            if fname.startswith("."):
+                continue
+
+            # Remove zero-byte files
+            if args.remove_zero and fpath.is_file():
+                if fname not in (".gitkeep", ".keep") and fpath.stat().st_size == 0:
+                    if args.apply:
+                        fpath.unlink()
+                    print(f"[{'remove' if args.apply else 'would remove'}] {fpath}")
+                    removed += 1
+                    continue
+
+            new_name = normalize_name(fname)
+            if new_name == fname.lower() == fname:
+                # Already normalized
+                if new_name == fname:
+                    continue
+
+            if new_name == fname:
+                continue
+
+            dest = dirpath / new_name
+            if dest.exists() and dest != fpath:
+                # Case-insensitive collision check
+                if dest.resolve() == fpath.resolve():
+                    # Same file, different case — safe to rename
+                    if args.apply:
+                        # Use a temp name to handle case-only renames on case-insensitive FS
+                        tmp = dirpath / (new_name + ".normalize-tmp")
+                        fpath.rename(tmp)
+                        tmp.rename(dest)
+                    print(f"[{'rename' if args.apply else 'would rename'}] {fpath} -> {new_name}")
+                    renamed += 1
+                elif args.move_conflicts:
+                    conflict_dest = conflicts_dir / fpath.relative_to(root)
+                    conflict_dest = unique_dest(conflict_dest)
+                    if args.apply:
+                        conflict_dest.parent.mkdir(parents=True, exist_ok=True)
+                        shutil.move(str(fpath), str(conflict_dest))
+                    print(f"[{'conflict' if args.apply else 'would conflict'}] {fpath} -> {conflict_dest}")
+                    conflicts += 1
+                else:
+                    print(f"[skip collision] {fpath} -> {new_name} (target exists)")
+                    skipped += 1
+            else:
+                if args.apply:
+                    fpath.rename(dest)
+                print(f"[{'rename' if args.apply else 'would rename'}] {fpath} -> {new_name}")
+                renamed += 1
+
+        # Process directories (bottom-up, so children are already renamed)
+        for dname in dirnames:
+            dpath = dirpath / dname
+
+            if dname.startswith("."):
+                continue
+
+            new_name = normalize_name(dname)
+            if new_name == dname:
+                continue
+
+            dest = dirpath / new_name
+            if dest.exists() and dest != dpath:
+                if dest.resolve() == dpath.resolve():
+                    if args.apply:
+                        tmp = dirpath / (new_name + ".normalize-tmp")
+                        dpath.rename(tmp)
+                        tmp.rename(dest)
+                    print(f"[{'rename' if args.apply else 'would rename'}] {dpath}/ -> {new_name}/")
+                    renamed += 1
+                else:
+                    print(f"[skip collision] {dpath}/ -> {new_name}/ (target exists)")
+                    skipped += 1
+            else:
+                if args.apply:
+                    dpath.rename(dest)
+                print(f"[{'rename' if args.apply else 'would rename'}] {dpath}/ -> {new_name}/")
+                renamed += 1
+
+    mode = "applied" if args.apply else "dry run"
+    print(f"Done. renamed={renamed}, removed={removed}, conflicts={conflicts}, skipped={skipped} ({mode}).")
+
+
+if __name__ == "__main__":
+    main()
