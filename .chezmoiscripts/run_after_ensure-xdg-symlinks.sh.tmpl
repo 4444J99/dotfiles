@@ -68,8 +68,9 @@ for app in "${apps[@]}"; do
   mkdir -p "$target"
 
   # Real directory exists — merge contents then remove
+  # --ignore-errors: apps like Dropbox have ephemeral internal files
   if [[ -d "$link" && ! -L "$link" ]]; then
-    rsync -a "$link/" "$target/"
+    rsync -a --ignore-errors "$link/" "$target/" || true
     rm -rf "$link"
   fi
 
