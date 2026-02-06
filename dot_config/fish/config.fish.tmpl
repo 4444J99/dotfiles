@@ -41,6 +41,9 @@ if status is-interactive
     set -gx GOMODCACHE $HOME/.cache/go/mod
     fish_add_path $GOPATH/bin
 
+    # Rust (rustup toolchain)
+    fish_add_path $HOME/.local/share/cargo/bin
+
     # pipx local bin
     fish_add_path $HOME/.local/bin
 

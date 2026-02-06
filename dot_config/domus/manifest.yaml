@@ -63,6 +63,7 @@ packages:
       - huggingface-cli
       - kimi-cli
       # Security & code quality
+      - actionlint
       - gitleaks
       - ggshield
       - trivy

@@ -16,6 +16,9 @@ export PKG_CONFIG_PATH="/opt/homebrew/opt/ruby/lib/pkgconfig"
 export GOPATH="${XDG_DATA_HOME:-$HOME/.local/share}/go"
 export PATH=$PATH:$GOPATH/bin
 
+# Rust (rustup toolchain)
+export PATH="${CARGO_HOME:-$HOME/.local/share/cargo}/bin:$PATH"
+
 # pipx local bin
 export PATH="$HOME/.local/bin:$PATH"
 
