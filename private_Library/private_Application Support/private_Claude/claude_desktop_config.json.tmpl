@@ -11,8 +11,11 @@
     "github": {
       "command": "docker",
       "args": [
-        "run", "-i", "--rm",
-        "-e", "GITHUB_PERSONAL_ACCESS_TOKEN",
+        "run",
+        "-i",
+        "--rm",
+        "-e",
+        "GITHUB_PERSONAL_ACCESS_TOKEN",
         "ghcr.io/github/github-mcp-server"
       ],
       "env": {
@@ -22,9 +25,12 @@
     "serena": {
       "command": "uvx",
       "args": [
-        "--from", "git+https://github.com/4444J99/serena",
-        "serena", "start-mcp-server",
-        "--context", "desktop-app"
+        "--from",
+        "git+https://github.com/4444J99/serena",
+        "serena",
+        "start-mcp-server",
+        "--context",
+        "desktop-app"
       ]
     }
   },
@@ -35,6 +41,7 @@
       "/Users/4jp/Library/Mobile Documents/com~apple~CloudDocs/Documents",
       "/Users/4jp/Library/Mobile Documents/com~apple~CloudDocs",
       "/Users/4jp/Workspace/narratological-algorithmic-lenses"
-    ]
+    ],
+    "sidebarMode": "task"
   }
 }

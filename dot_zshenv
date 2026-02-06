@@ -5,6 +5,9 @@ export XDG_DATA_HOME="$HOME/.local/share"
 export XDG_STATE_HOME="$HOME/.local/state"
 export XDG_CACHE_HOME="$HOME/.cache"
 
+# Disable macOS Terminal session restore (overrides HISTFILE with per-session files)
+export SHELL_SESSIONS_DISABLE=1
+
 # Redirect zsh config to XDG location
 export ZDOTDIR="$XDG_CONFIG_HOME/zsh"
 
