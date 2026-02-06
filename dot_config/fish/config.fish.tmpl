@@ -200,10 +200,14 @@ if status is-interactive
     abbr -a gcb 'git checkout -b'
     abbr -a gpl 'git pull --rebase'
     abbr -a gps 'git push'
+    abbr -a gpsf 'git push --force-with-lease'
     abbr -a gl 'git log --oneline --graph --decorate -20'
+    abbr -a gla 'git log --oneline --graph --decorate --all'
     abbr -a gst 'git stash'
     abbr -a gstp 'git stash pop'
     abbr -a gb 'git branch'
+    abbr -a gba 'git branch -a'
+    abbr -a gbd 'git branch -d'
 
     # Chezmoi
     abbr -a cm chezmoi
@@ -212,6 +216,10 @@ if status is-interactive
     abbr -a cmdf 'chezmoi diff | awk \'BEGIN{s=0} /^diff --git.*chezmoiscripts/{s=1;next} /^diff --git/{s=0} s==0{print}\''
     abbr -a cme 'chezmoi edit'
     abbr -a cms 'chezmoi status'
+    abbr -a cmu 'chezmoi update'
+    abbr -a cmcd 'cd ~/dotfiles'
+    abbr -a cmpush 'cd ~/dotfiles && git push'
+    abbr -a cmlog 'cd ~/dotfiles && git log --oneline -10'
 
     # Navigation
     abbr -a dl 'cd ~/Downloads'
@@ -223,6 +231,7 @@ if status is-interactive
     abbr -a tma 'tmux attach -t'
     abbr -a tmn 'tmux new -s'
     abbr -a tml 'tmux list-sessions'
+    abbr -a tmk 'tmux kill-session -t'
 
     # ─────────────────────────────────────────────────────────────────────────
     # Aliases (for commands that should stay as-is)
@@ -234,6 +243,7 @@ if status is-interactive
         alias ll 'eza -la --icons --git'
         alias la 'eza -a --icons'
         alias lt 'eza --tree --level=2 --icons'
+        alias llt 'eza -la --tree --level=2 --icons --git'
     else
         alias ll 'ls -la'
         alias la 'ls -a'
@@ -272,6 +282,7 @@ if status is-interactive
     # Health & recovery
     abbr -a cmh chezmoi-health
     abbr -a cmhv 'VERBOSE=1 chezmoi-health'
+    abbr -a cmhj 'chezmoi-health --json'
     abbr -a cmr chezmoi-recover
 
     # Lazygit
