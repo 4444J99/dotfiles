@@ -42,6 +42,8 @@ ALLOW_NAMES = {
     "Finance",
     "Legal",
     "Projects",
+    "Clouds-Other",
+    "google-cloud-sdk",
     "go",
 }
 
