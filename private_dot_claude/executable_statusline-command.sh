@@ -25,25 +25,23 @@ git_info=""
 if git -C "$cwd" rev-parse --git-dir &>/dev/null 2>&1; then
   branch=$(git -C "$cwd" -c "gc.auto=0" branch --show-current 2>/dev/null || git -C "$cwd" -c "gc.auto=0" rev-parse --short HEAD 2>/dev/null)
   if [[ -n "$branch" ]]; then
-    git_info=" on $(printf '\033[1;35m') $branch$(printf '\033[0m')"
+    git_info=" on $branch"
 
     # Git status
     status=$(git -C "$cwd" -c "gc.auto=0" status --porcelain 2>/dev/null)
     if [[ -n "$status" ]]; then
-      untracked=$(echo "$status" | grep -c "^??")
-      modified=$(echo "$status" | grep -c "^ M")
-      staged=$(echo "$status" | grep -c "^M")
-      deleted=$(echo "$status" | grep -c "^ D")
+      untracked=$(echo "$status" | grep -c "^??" || true)
+      modified=$(echo "$status" | grep -c "^ M" || true)
+      staged=$(echo "$status" | grep -c "^M" || true)
+      deleted=$(echo "$status" | grep -c "^ D" || true)
 
       git_status=""
       [[ $staged -gt 0 ]] && git_status="${git_status}+${staged}"
       [[ $modified -gt 0 ]] && git_status="${git_status}!${modified}"
-      [[ $deleted -gt 0 ]] && git_status="${git_status}✘${deleted}"
+      [[ $deleted -gt 0 ]] && git_status="${git_status}x${deleted}"
       [[ $untracked -gt 0 ]] && git_status="${git_status}?${untracked}"
 
-      if [[ -n "$git_status" ]]; then
-        git_info="${git_info} $(printf '\033[1;31m')[${git_status}]$(printf '\033[0m')"
-      fi
+      [[ -n "$git_status" ]] && git_info="${git_info} [${git_status}]"
     fi
   fi
 fi
@@ -55,4 +53,4 @@ model=$(echo "$input" | jq -r '.model.display_name')
 time=$(date +%H:%M)
 
 # Output format: directory + git + model + time
-printf "$(printf '\033[1;34m')%s$(printf '\033[0m')%s $(printf '\033[2m')%s %s$(printf '\033[0m')" "$dir" "$git_info" "$model" "$time"
+printf "%s%s | %s %s" "$dir" "$git_info" "$model" "$time"
