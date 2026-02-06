@@ -12,4 +12,4 @@ This file applies to all projects under `/Users/4jp` and is mandatory. If a proj
 - If a secret is discovered outside 1Password, migrate it immediately and replace usage with 1Password-backed loading.
 
 ## Additional Guidance
-- Also follow `/Users/4jp/System/Guides/AGENTS.md` for general development conventions and workspace practices.
+- Also follow `~/dotfiles/docs/system-guides/AGENTS.md` for general development conventions and workspace practices.
