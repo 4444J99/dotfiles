@@ -5,6 +5,22 @@
 [user]
 	email = {{ .email }}
 	name = {{ .name }}
+{{- if .ssh_signing_key }}
+	signingkey = {{ .ssh_signing_key }}
+{{- end }}
+
+[commit]
+	gpgsign = true
+
+[tag]
+	gpgsign = true
+
+[gpg]
+	format = ssh
+
+[gpg "ssh"]
+	program = "/Applications/1Password.app/Contents/MacOS/op-ssh-sign"
+	allowedSignersFile = {{ .chezmoi.homeDir }}/.config/git/allowed_signers
 
 [core]
 	hooksPath = {{ .chezmoi.homeDir }}/.config/git/hooks
@@ -147,10 +163,11 @@
 	clean = git-lfs clean -- %f
 
 # ─────────────────────────────────────────────────────────────────────────────
-# GitHub Authentication
+# GitHub
 # ─────────────────────────────────────────────────────────────────────────────
 
-# GitHub token from 1Password
-[github]
-	user = {{ .name }}
-	token = {{ onepasswordRead "op://Personal/master-org-token-110525/token" }} # allow-secret
+[credential "https://github.com"]
+	helper = !/opt/homebrew/bin/gh auth git-credential
+
+[url "git@github.com:"]
+	insteadOf = https://github.com/

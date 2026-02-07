@@ -1,0 +1,26 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+if ! command -v gh &>/dev/null; then
+  echo "⚠️  gh CLI not found, skipping extensions"
+  exit 0
+fi
+
+if ! gh auth status &>/dev/null; then
+  echo "⚠️  gh not authenticated, skipping extensions"
+  exit 0
+fi
+
+extensions=(
+  meiji163/gh-notify
+  dlvhdr/gh-dash
+)
+
+for ext in "${extensions[@]}"; do
+  if ! gh extension list | grep -q "${ext##*/}"; then
+    echo "Installing gh extension: $ext"
+    gh extension install "$ext" || echo "⚠️  Failed to install $ext"
+  fi
+done
+
+echo "✅ gh extensions ready"
