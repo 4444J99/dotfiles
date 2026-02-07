@@ -70,7 +70,7 @@ vimcmd_symbol = "[❮](bold #9ece6a)"
 [time]
 disabled = false
 format = "[$time]($style)"
-style = "dimmed white"
+style = "#a9b1d6"
 time_format = "%H:%M"
 
 # Language/tool modules - Tokyo Night colors
