@@ -15,3 +15,31 @@ export ZDOTDIR="$XDG_CONFIG_HOME/zsh"
 export HISTFILE="$XDG_STATE_HOME/zsh/history"
 export HISTSIZE=50000
 export SAVEHIST=50000
+
+# ── World Root: canonical ontology topology ──
+export WORLD_ROOT="$HOME/world"
+export AUDIT_ROOT="$WORLD_ROOT/.audit"
+export REALMS="create research operate publish archive"
+export VCS_HOST="github.com"
+export ORG_POLICY="mirror-local-to-remote"
+export DEFAULT_ORG_UNIT="liminal"
+
+# ── Unmanaged (excluded from audit) ──
+export UNMANAGED_DIRS="$HOME/Library $HOME/.cache $HOME/.config $HOME/.Trash"
+
+# ── Organ → GitHub org mapping (stable references, mutable values) ──
+export ORG_I="ivviiviivvi"
+export ORG_II="omni-dromenon-machina"
+export ORG_III="labores-profani-crux"
+export ORG_IV=""
+export ORG_V=""
+export ORG_VI=""
+export ORG_VII=""
+
+# ── Personal namespaces ──
+export ORG_LIMINAL="4444j99"
+export ORG_LIMINAL_ALT="4444jpp"
+
+# ── Account identity ──
+export GITHUB_PRIMARY="4444J99"
+export GITHUB_SECONDARY="4444JPP"
